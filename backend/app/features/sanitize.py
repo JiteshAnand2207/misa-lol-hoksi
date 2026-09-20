@@ -6,6 +6,7 @@ fail validation fall back to a safe feature default -- they never raise, so
 existing profiles can never start erroring.
 """
 
+import hashlib
 from typing import Any
 
 from app.features import common
@@ -99,14 +100,18 @@ def sanitize_presence(value: Any) -> bool:
 
 def sanitize_secret(value: Any) -> dict[str, str]:
     if not isinstance(value, dict):
-        return {"word": "", "url": "", "label": ""}
+        return {"word": "", "wordHash": "", "url": "", "label": ""}
 
     url = common.plain_text(value.get("url"), 500)
     if not common.is_http_url(url):
         url = ""
 
+    word = common.plain_text(value.get("word"), 64)
+    word_hash = hashlib.sha256(word.encode("utf-8")).hexdigest() if word else ""
+
     return {
-        "word": common.plain_text(value.get("word"), 64),
+        "word": word,
+        "wordHash": word_hash,
         "url": url,
         "label": common.plain_text(value.get("label"), 80),
     }

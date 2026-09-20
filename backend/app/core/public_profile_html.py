@@ -13,6 +13,15 @@ from app.core.sections import parse_lyrics, section_has_content
 from app.core.widgets import safe_widget_url
 from app.core.social_icons import social_icon_markup
 from app.core.social_prefixes import DEFAULT_ICON_COLOR, resolve_icon_color
+from app.features.render import feature_blocks_html
+
+PUBLIC_FEATURE_CSS = """
+.feature-block h2{font-size:13px;margin:0 0 8px;letter-spacing:.04em;color:#ffffff99;text-transform:uppercase}
+.feature-text{margin:0;color:#ffffffcc;font-size:13px;line-height:1.55}
+.feature-text.presence-now{font-variant-numeric:tabular-nums}
+.neighbour-chip{display:inline-block}
+.section-flip .feature-text{color:#ffffffb3}
+"""
 
 PUBLIC_ASK_MAX_QUESTION = 400
 PUBLIC_ASK_MAX_AUTHOR = 48
@@ -903,10 +912,12 @@ def render_public_profile(config: dict, request: Request | None = None, widgets:
     display_name_tag = f'<h1 id="display-name" class="{name_class}" style="{name_style}">{display_name}</h1>' if show_display_name else ""
     handle_tag = f'<p class="handle">@{username}</p>' if show_username else ""
     ask_box = _public_asks_markup(asks, username_raw, display_name, request) if settings.get("asks") else ""
+    feature_block_markup = feature_blocks_html(settings)
     identity = (
         f'<div class="name-row">{display_name_tag}{guild_tag}{verified}{badges_tag}</div>'
         f'{handle_tag}{description_tag}{location_tag}'
         f'<div class="socials">{links}</div>{_public_widgets_markup(widgets)}{_public_sections_markup(config, username_raw)}'
+        f'{feature_block_markup}'
         f'{ask_box}'
     )
     if layout == "Sleek":
@@ -1122,6 +1133,7 @@ h1{{margin:0;font-size:24px;font-weight:600;letter-spacing:-.04em;color:#fff}}
 .enter-pop{{animation:enter-pop .45s cubic-bezier(.22,1,.36,1) both}}
 @media(max-width:639px){{body{{height:100vh;height:100dvh;min-height:100dvh;justify-content:center;padding:0;overflow:hidden}}.card-stage{{position:fixed;left:50%;top:50%;width:min(calc(100vw - 24px),{frame_width}px);max-width:calc(100vw - 24px);transform:translate(-50%,-50%) scale(var(--mobile-frame-scale,var(--frame-scale)));transform-origin:center}}}}
 @media (prefers-reduced-motion:reduce){{.enter-fade,.enter-unfold,.enter-pop{{animation:none}}.codrops-rain-effect{{display:none}}}}
+{PUBLIC_FEATURE_CSS if feature_block_markup else ""}
 {PUBLIC_ASK_CSS if (settings.get("asks") and asks is not None) else ""}
 </style></head>
 <body{body_class}{cursor_attr} data-profile-user="{username}" data-audio-enabled="{1 if audio_enabled else 0}" data-volume="{volume_ratio}" data-tilt="{card_tilt}" data-name-effect="{escape(username_effect, quote=True)}" data-tab-title="{tab_title_on}" data-bio-type-ms="{bio_type_ms}" data-bio-delete-ms="{bio_delete_ms}" data-bio-pause-ms="{bio_pause_ms}" data-page-enter="{escape(page_enter, quote=True)}" data-click-sound="{click_sound_on}"{f' data-click-src="{asset_src("clickSound")}"' if has_click else ""}>

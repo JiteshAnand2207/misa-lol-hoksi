@@ -1,3 +1,5 @@
+import hashlib
+
 import pytest
 
 from app.features import sanitize as fs
@@ -37,6 +39,7 @@ class TestSanitizeAll:
         assert cleaned["capsule"]["at"] == "2030-01-01T00:00:00Z"
         assert cleaned["neighbours"] == ["odt", "another"]
         assert cleaned["secret"]["url"] == "https://example.com"
+        assert cleaned["secret"]["wordHash"] == hashlib.sha256(b"word").hexdigest()
         assert cleaned["tally"]["options"] == ["a", "b", "C"]
 
     def test_missing_keys_get_defaults(self):
@@ -46,7 +49,7 @@ class TestSanitizeAll:
         assert cleaned["night"] == {"tz": "", "from": 23, "to": 5}
         assert cleaned["neighbours"] == []
         assert cleaned["tally"] == {"q": "", "options": []}
-        assert cleaned["secret"] == {"word": "", "url": "", "label": ""}
+        assert cleaned["secret"] == {"word": "", "wordHash": "", "url": "", "label": ""}
 
     def test_non_feature_keys_pass_through(self):
         cleaned = fs.sanitize_all({"vigil": True, "replay": 3, "layout": "Modern"})
@@ -107,7 +110,7 @@ class TestDefaults:
         settings = config["settings"]
         assert settings["asks"] is False
         assert settings["tally"] == {"q": "", "options": []}
-        assert settings["secret"] == {"word": "", "url": "", "label": ""}
+        assert settings["secret"] == {"word": "", "wordHash": "", "url": "", "label": ""}
 
     def test_defaults_match_sanitized_empty(self):
         assert fs.defaults()["night"] == {"tz": "", "from": 23, "to": 5}

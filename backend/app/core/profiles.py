@@ -166,4 +166,8 @@ async def resolve_public_profile(username: str) -> dict[str, Any] | None:
     identity = cleaned.get("profile")
     if isinstance(identity, dict):
         identity["views"] = await data_api.get_profile_view_count(user.id)
+    from app.features.render import stripped_secret
+    settings = cleaned.get("settings")
+    if isinstance(settings, dict):
+        cleaned["settings"] = stripped_secret(settings)
     return cleaned
