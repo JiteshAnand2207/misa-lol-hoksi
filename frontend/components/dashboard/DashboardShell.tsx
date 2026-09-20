@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, BadgeCheck, BookOpen, Check, ChevronRight, CircleHelp, Copy, LayoutDashboard, Link2, LockKeyhole, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Palette, Search, Settings, Share2, ShieldCheck, Sparkles, Trophy, UsersRound, X } from "lucide-react";
+import { BarChart3, BadgeCheck, BookOpen, Check, ChevronRight, CircleHelp, Copy, Inbox, LayoutDashboard, Link2, LockKeyhole, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Palette, Search, Settings, Share2, ShieldCheck, Sparkles, Trophy, UsersRound, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { LanguageSelect } from "@/components/dashboard/LanguageSelect";
 import { RuntimeErrorBoundary } from "@/components/dashboard/RuntimeErrorBoundary";
@@ -61,6 +61,7 @@ function SidebarContent({ close, onToggleDesktop }: { close: () => void; onToggl
       enabled("nav.badges") && { label: t("nav.badges"), href: "/badges", icon: BadgeCheck },
       enabled("nav.settings") && { label: t("nav.settings"), href: "/settings", icon: Settings },
       enabled("nav.security") && { label: t("nav.security", undefined, "Security"), href: "/security", icon: LockKeyhole },
+      enabled("nav.me") && { label: t("nav.me", undefined, "Moderation"), href: "/me", icon: Inbox },
     ].filter((item): item is DashboardNavItem => Boolean(item)) },
     { label: t("nav.customize"), items: enabled("nav.customize") ? [{ label: t("nav.customize"), href: "/customize", icon: Palette }, enabled("nav.constellations") && { label: t("nav.constellations", undefined, "Constellations"), href: "/constellations", icon: UsersRound }].filter((item): item is DashboardNavItem => Boolean(item)) : [] },
     { label: t("nav.links"), items: enabled("nav.links") ? [{ label: t("nav.links"), href: "/links", icon: Link2 }] : [] },

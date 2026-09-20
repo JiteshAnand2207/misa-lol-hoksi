@@ -166,6 +166,11 @@ export interface ProfileConfig {
     ogOverlayAvatar?: boolean;
     ogOverlayName?: boolean;
     ogOverlayAddress?: boolean;
+    asks?: boolean;
+    guestbook?: boolean;
+    doodles?: boolean;
+    tally?: { q?: string; options?: string[] };
+    secret?: { hasSecret?: boolean; wordHash?: string; url?: string | null; label?: string };
   };
   assets: {
     avatar: ProfileAsset;
