@@ -45,6 +45,25 @@ PUBLIC_ASK_CSS = """
 .ask-empty{margin:0;color:#ffffff80;font-size:12px}
 """
 
+PUBLIC_GUESTBOOK_CSS = """
+.guestbook{max-width:560px;margin:18px auto 0;text-align:left}
+.guestbook h2{font-size:15px;margin:0 0 10px;letter-spacing:.02em}
+.book-rows{display:flex;flex-direction:column;gap:10px}
+.book-row{background:#ffffff0d;border:1px solid #ffffff1a;border-radius:12px;padding:12px 14px}
+.book-row p{margin:0 0 6px;font-size:13px;line-height:1.5}
+.book-row span{display:block;color:#ffffff80;font-size:11px}
+.book-empty{margin:0;color:#ffffff80;font-size:12px}
+.book-form{display:flex;flex-direction:column;gap:8px;margin:12px 0 0;border-top:1px solid #ffffff1a;padding-top:12px}
+.book-form textarea,.book-form input{width:100%;box-sizing:border-box;background:#ffffff0d;border:1px solid #ffffff26;border-radius:10px;color:inherit;font:inherit;padding:10px 12px;outline:none}
+.book-form textarea{resize:vertical;min-height:56px}
+.book-form textarea:focus,.book-form input:focus{border-color:#9b87f588}
+.book-form-row{display:flex;gap:8px}
+.book-form-row input{flex:1}
+.book-form button{border:0;border-radius:10px;background:#9b87f5;color:#fff;font:inherit;font-weight:600;padding:10px 18px;cursor:pointer;align-self:flex-start}
+.book-form button:hover{background:#8d7df0}
+.book-notice{color:#9b87f5;font-size:13px;margin:0 0 10px}
+"""
+
 def _color_with_alpha(value: str, alpha: float) -> str:
     raw = (value or "#ffffff").lstrip("#")
     if len(raw) == 3:
@@ -608,7 +627,7 @@ p.className="misa-sakura-petal";p.style.animation="misa-sakura-fall "+ft+"s line
 p.style.background="linear-gradient(120deg,rgba(255,183,197,.9),rgba(255,197,208,.9))";p.style.borderRadius=ri(14,14+Math.floor(Math.random()*10))+"px "+ri(1,Math.max(1,Math.floor(w/4)))+"px";p.style.height=h+"px";p.style.left=Math.random()*l.clientWidth-100+"px";p.style.marginTop=-(Math.floor(Math.random()*20)+15)+"px";p.style.width=w+"px";p.addEventListener("animationend",()=>p.remove(),{once:true});l.appendChild(p)};requestAnimationFrame(create)})();
 </script>"""
 
-def render_public_profile(config: dict, request: Request | None = None, widgets: list | None = None, default_fonts: list[dict] | None = None, asks: list | None = None) -> str:
+def render_public_profile(config: dict, request: Request | None = None, widgets: list | None = None, default_fonts: list[dict] | None = None, asks: list | None = None, signatures: list | None = None) -> str:
     incoming = config if isinstance(config, dict) else {}
     discord_live = incoming.get("discord") if isinstance(incoming.get("discord"), dict) else {}
     rank = incoming.get("rank") if isinstance(incoming.get("rank"), dict) else None
@@ -912,12 +931,14 @@ def render_public_profile(config: dict, request: Request | None = None, widgets:
     display_name_tag = f'<h1 id="display-name" class="{name_class}" style="{name_style}">{display_name}</h1>' if show_display_name else ""
     handle_tag = f'<p class="handle">@{username}</p>' if show_username else ""
     ask_box = _public_asks_markup(asks, username_raw, display_name, request) if settings.get("asks") else ""
+    guestbook_block = _public_guestbook_markup(signatures, username_raw, display_name, request) if settings.get("guestbook") else ""
     feature_block_markup = feature_blocks_html(settings)
     identity = (
         f'<div class="name-row">{display_name_tag}{guild_tag}{verified}{badges_tag}</div>'
         f'{handle_tag}{description_tag}{location_tag}'
         f'<div class="socials">{links}</div>{_public_widgets_markup(widgets)}{_public_sections_markup(config, username_raw)}'
         f'{feature_block_markup}'
+        f'{guestbook_block}'
         f'{ask_box}'
     )
     if layout == "Sleek":
@@ -1135,6 +1156,7 @@ h1{{margin:0;font-size:24px;font-weight:600;letter-spacing:-.04em;color:#fff}}
 @media (prefers-reduced-motion:reduce){{.enter-fade,.enter-unfold,.enter-pop{{animation:none}}.codrops-rain-effect{{display:none}}}}
 {PUBLIC_FEATURE_CSS if feature_block_markup else ""}
 {PUBLIC_ASK_CSS if (settings.get("asks") and asks is not None) else ""}
+{PUBLIC_GUESTBOOK_CSS if (settings.get("guestbook") and signatures is not None) else ""}
 </style></head>
 <body{body_class}{cursor_attr} data-profile-user="{username}" data-audio-enabled="{1 if audio_enabled else 0}" data-volume="{volume_ratio}" data-tilt="{card_tilt}" data-name-effect="{escape(username_effect, quote=True)}" data-tab-title="{tab_title_on}" data-bio-type-ms="{bio_type_ms}" data-bio-delete-ms="{bio_delete_ms}" data-bio-pause-ms="{bio_pause_ms}" data-page-enter="{escape(page_enter, quote=True)}" data-click-sound="{click_sound_on}"{f' data-click-src="{asset_src("clickSound")}"' if has_click else ""}>
 {background_tag}{video_tag}<div class="backdrop"></div>{effect_canvas_tag}{sakura_effect_tag}{rain_effect_tag}{effect_video_tag if background_effect == "None" else ""}
@@ -1196,6 +1218,48 @@ def _public_asks_markup(asks: list | None, username_raw: str, display_name: str,
         "</div>"
         "</form>"
         f"{list_html}"
+        "</section>"
+    )
+
+
+def _public_guestbook_markup(signatures: list | None, username_raw: str, display_name: str, request: Request | None) -> str:
+    """Render the visitor-book block: approved signatures plus a signing form."""
+    if signatures is None:
+        return ""
+    notice = ""
+    if request is not None and "signed" in request.query_params:
+        notice = '<p class="book-notice">Signed! Thanks.</p>'
+    rows: list[str] = []
+    for item in signatures:
+        if not isinstance(item, dict):
+            continue
+        line = str(item.get("line") or "").strip()
+        if not line:
+            continue
+        signer = escape(str(item.get("name") or "anonym")[:48])
+        when = escape(str(item.get("at") or "").split("T")[0])
+        line_html = "<br>".join(escape(part) for part in line.splitlines())
+        rows.append(f'<div class="book-row"><p>{line_html}</p><span>— {signer} · {when}</span></div>')
+    list_html = (
+        f'<div class="book-rows">{"".join(rows)}</div>'
+        if rows
+        else '<p class="book-empty">No signatures yet — be the first!</p>'
+    )
+    slug = escape(username_raw[:24], quote=True)
+    recipient = escape(str(display_name or username_raw))
+    return (
+        f'<section class="section guestbook" data-misa-guest="1">'
+        "<h2>Guestbook</h2>"
+        f"{notice}"
+        f"{list_html}"
+        f'<form class="book-form" method="post" action="/api/v1/profile/{slug}/guestbook">'
+        f'<label class="sr-only" for="book-line">Your line for {recipient}</label>'
+        f'<textarea id="book-line" name="line" rows="2" maxlength="400" required placeholder="Sign {recipient}\'s book — it needs their approval before it shows"></textarea>'
+        '<div class="book-form-row">'
+        f'<input name="name" maxlength="48" placeholder="Your name (optional)" autocomplete="off">'
+        '<button type="submit">Sign the book</button>'
+        "</div>"
+        "</form>"
         "</section>"
     )
 

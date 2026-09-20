@@ -151,6 +151,7 @@ def create_app() -> FastAPI:
                     widgets = []
                 default_fonts = await admin_db.list_default_fonts() if admin_db.has_pool() else []
                 asks = None
+                signatures = None
                 try:
                     if admin_db.has_pool() and (profile.get("settings") or {}).get("asks"):
                         from app.db import features_db
@@ -159,7 +160,15 @@ def create_app() -> FastAPI:
                             asks = await features_db.list_published_asks(str(uid))
                 except Exception:
                     asks = None
-                return HTMLResponse(render_public_profile(profile, request, widgets=widgets, default_fonts=default_fonts, asks=asks), headers={"Cache-Control": "no-store"})
+                try:
+                    if admin_db.has_pool() and (profile.get("settings") or {}).get("guestbook"):
+                        from app.db import features_db
+                        uid = (profile.get("profile") or {}).get("uid")
+                        if uid:
+                            signatures = await features_db.list_approved_guestbook(str(uid))
+                except Exception:
+                    signatures = None
+                return HTMLResponse(render_public_profile(profile, request, widgets=widgets, default_fonts=default_fonts, asks=asks, signatures=signatures), headers={"Cache-Control": "no-store"})
             alias = await current_handle_for(slug)
             if alias:
                 return username_redirect(f"/{alias}")
