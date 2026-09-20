@@ -310,6 +310,83 @@ async def edit_answer(owner_id: str, ask_id: str, answer: str) -> dict[str, Any]
     return _row_to_dict(row)
 
 
+async def ensure_misa_tally() -> None:
+    pool = admin_db.database_pool()
+    statements = (
+        """
+        CREATE TABLE IF NOT EXISTS misa_tally_votes (
+            id UUID PRIMARY KEY,
+            owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            option VARCHAR(120) NOT NULL,
+            ip_hash CHAR(64) NOT NULL DEFAULT '',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS misa_tally_owner_idx ON misa_tally_votes (owner_id, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS misa_tally_owner_option_idx ON misa_tally_votes (owner_id, option)",
+    )
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            for statement in statements:
+                await conn.execute(statement)
+
+
+async def ensure_feature_tables() -> None:
+    """Install every misa_* feature table. Idempotent and additive only."""
+    if not admin_db.has_pool():
+        return
+    await ensure_misa_asks()
+    await ensure_misa_guestbook()
+    await ensure_misa_tally()
+
+
+async def tally_totals(owner_id: str) -> dict[str, Any]:
+    pool = admin_db.database_pool()
+    rows = await pool.fetch(
+        "SELECT option, COUNT(*) AS count FROM misa_tally_votes WHERE owner_id = $1 GROUP BY option",
+        UUID(owner_id),
+    )
+    options = [
+        {"option": str(row["option"]), "count": int(row["count"])}
+        for row in rows
+    ]
+    return {"options": options, "total": sum(item["count"] for item in options)}
+
+
+async def has_tally_vote(owner_id: str, ip_hash: str) -> bool:
+    if not ip_hash:
+        return False
+    pool = admin_db.database_pool()
+    row = await pool.fetchrow(
+        "SELECT 1 FROM misa_tally_votes WHERE owner_id = $1 AND ip_hash = $2 LIMIT 1",
+        UUID(owner_id),
+        ip_hash,
+    )
+    return row is not None
+
+
+async def add_tally_vote(owner_id: str, option: str, *, ip: str = "") -> dict[str, Any]:
+    pool = admin_db.database_pool()
+    vote_id = uuid4()
+    await pool.execute(
+        """
+        INSERT INTO misa_tally_votes (id, owner_id, option, ip_hash)
+        VALUES ($1, $2, $3, $4)
+        """,
+        vote_id,
+        UUID(owner_id),
+        option,
+        hash_ip(ip) if ip else "",
+    )
+    return await tally_totals(owner_id)
+
+
+async def clear_tally(owner_id: str) -> bool:
+    pool = admin_db.database_pool()
+    result = await pool.execute("DELETE FROM misa_tally_votes WHERE owner_id = $1", UUID(owner_id))
+    return result != "DELETE 0"
+
+
 async def delete_ask(owner_id: str, ask_id: str) -> bool:
     pool = admin_db.database_pool()
     result = await pool.execute(

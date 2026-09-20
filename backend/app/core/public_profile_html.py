@@ -64,6 +64,22 @@ PUBLIC_GUESTBOOK_CSS = """
 .book-notice{color:#9b87f5;font-size:13px;margin:0 0 10px}
 """
 
+PUBLIC_TALLY_CSS = """
+.tallybox{max-width:560px;margin:18px auto 0;text-align:left}
+.tallybox h2{font-size:15px;margin:0 0 6px;letter-spacing:.02em}
+.tally-q{font-size:13px;color:#ffffffb3;margin:0 0 12px;line-height:1.5}
+.tally-list{display:flex;flex-direction:column;gap:8px}
+.tally-row{background:#ffffff0d;border:1px solid #ffffff1a;border-radius:12px;overflow:hidden}
+.tally-label{display:flex;align-items:center;gap:10px;padding:10px 14px;font-size:13px;cursor:pointer}
+.tally-label input{accent-color:#9b87f5}
+.tally-bar{height:4px;background:#ffffff14}
+.tally-bar span{display:block;height:100%;background:#9b87f5}
+.tally-meta{margin:10px 0 0;color:#ffffff80;font-size:11px}
+.tally-sent{color:#9b87f5;font-size:13px;margin:0 0 10px}
+.tally-btn{border:0;border-radius:10px;background:#9b87f5;color:#fff;font:inherit;font-weight:600;padding:10px 18px;cursor:pointer;margin-top:10px}
+.tally-btn:hover{background:#8d7df0}
+"""
+
 def _color_with_alpha(value: str, alpha: float) -> str:
     raw = (value or "#ffffff").lstrip("#")
     if len(raw) == 3:
@@ -627,7 +643,7 @@ p.className="misa-sakura-petal";p.style.animation="misa-sakura-fall "+ft+"s line
 p.style.background="linear-gradient(120deg,rgba(255,183,197,.9),rgba(255,197,208,.9))";p.style.borderRadius=ri(14,14+Math.floor(Math.random()*10))+"px "+ri(1,Math.max(1,Math.floor(w/4)))+"px";p.style.height=h+"px";p.style.left=Math.random()*l.clientWidth-100+"px";p.style.marginTop=-(Math.floor(Math.random()*20)+15)+"px";p.style.width=w+"px";p.addEventListener("animationend",()=>p.remove(),{once:true});l.appendChild(p)};requestAnimationFrame(create)})();
 </script>"""
 
-def render_public_profile(config: dict, request: Request | None = None, widgets: list | None = None, default_fonts: list[dict] | None = None, asks: list | None = None, signatures: list | None = None) -> str:
+def render_public_profile(config: dict, request: Request | None = None, widgets: list | None = None, default_fonts: list[dict] | None = None, asks: list | None = None, signatures: list | None = None, tally: dict | None = None) -> str:
     incoming = config if isinstance(config, dict) else {}
     discord_live = incoming.get("discord") if isinstance(incoming.get("discord"), dict) else {}
     rank = incoming.get("rank") if isinstance(incoming.get("rank"), dict) else None
@@ -932,6 +948,7 @@ def render_public_profile(config: dict, request: Request | None = None, widgets:
     handle_tag = f'<p class="handle">@{username}</p>' if show_username else ""
     ask_box = _public_asks_markup(asks, username_raw, display_name, request) if settings.get("asks") else ""
     guestbook_block = _public_guestbook_markup(signatures, username_raw, display_name, request) if settings.get("guestbook") else ""
+    tally_block = _public_tally_markup(tally, username_raw, request) if settings.get("tally") and tally else ""
     feature_block_markup = feature_blocks_html(settings)
     identity = (
         f'<div class="name-row">{display_name_tag}{guild_tag}{verified}{badges_tag}</div>'
@@ -939,6 +956,7 @@ def render_public_profile(config: dict, request: Request | None = None, widgets:
         f'<div class="socials">{links}</div>{_public_widgets_markup(widgets)}{_public_sections_markup(config, username_raw)}'
         f'{feature_block_markup}'
         f'{guestbook_block}'
+        f'{tally_block}'
         f'{ask_box}'
     )
     if layout == "Sleek":
@@ -1157,6 +1175,7 @@ h1{{margin:0;font-size:24px;font-weight:600;letter-spacing:-.04em;color:#fff}}
 {PUBLIC_FEATURE_CSS if feature_block_markup else ""}
 {PUBLIC_ASK_CSS if (settings.get("asks") and asks is not None) else ""}
 {PUBLIC_GUESTBOOK_CSS if (settings.get("guestbook") and signatures is not None) else ""}
+{PUBLIC_TALLY_CSS if (settings.get("tally") and tally) else ""}
 </style></head>
 <body{body_class}{cursor_attr} data-profile-user="{username}" data-audio-enabled="{1 if audio_enabled else 0}" data-volume="{volume_ratio}" data-tilt="{card_tilt}" data-name-effect="{escape(username_effect, quote=True)}" data-tab-title="{tab_title_on}" data-bio-type-ms="{bio_type_ms}" data-bio-delete-ms="{bio_delete_ms}" data-bio-pause-ms="{bio_pause_ms}" data-page-enter="{escape(page_enter, quote=True)}" data-click-sound="{click_sound_on}"{f' data-click-src="{asset_src("clickSound")}"' if has_click else ""}>
 {background_tag}{video_tag}<div class="backdrop"></div>{effect_canvas_tag}{sakura_effect_tag}{rain_effect_tag}{effect_video_tag if background_effect == "None" else ""}
@@ -1260,6 +1279,44 @@ def _public_guestbook_markup(signatures: list | None, username_raw: str, display
         '<button type="submit">Sign the book</button>'
         "</div>"
         "</form>"
+        "</section>"
+    )
+
+
+def _public_tally_markup(tally: dict, username_raw: str, request: Request | None) -> str:
+    """Render the visitor poll: question, bars, and a radio form to vote."""
+    question = str(tally.get("question") or "").strip()
+    options = [option for option in (tally.get("options") or []) if isinstance(option, dict)]
+    total = int(tally.get("total") or 0)
+    if not question or len(options) < 2:
+        return ""
+    notice = ""
+    if request is not None and "tallied" in request.query_params:
+        notice = '<p class="tally-sent">Tallied! Thanks.</p>'
+    rows: list[str] = []
+    for option in options:
+        name = escape(str(option.get("name") or "")[:80])
+        if not name:
+            continue
+        count = max(0, int(option.get("count") or 0))
+        share = round((count / total) * 100) if total else 0
+        rows.append(
+            '<div class="tally-row">'
+            f'<label class="tally-label"><input type="radio" name="option" value="{name}"><span>{name}</span><em style="margin-left:auto;font-style:normal;color:#ffffff80">{count}</em></label>'
+            f'<div class="tally-bar"><span style="width:{min(100, share)}%"></span></div>'
+            "</div>"
+        )
+    slug = escape(username_raw[:24], quote=True)
+    return (
+        f'<section class="section tallybox" data-misa-tally="1">'
+        f"<h2>Tally</h2>"
+        f'<p class="tally-q">{escape(question[:200])}</p>'
+        f"{notice}"
+        f'<form method="post" action="/api/v1/profile/{slug}/tally">'
+        f'<div class="tally-list">{"".join(rows)}</div>'
+        f'<button class="tally-btn" type="submit">Vote</button>'
+        f"</form>"
+        f'<p class="tally-meta">{total} {total == 1 and "vote" or "votes"} so far</p>'
         "</section>"
     )
 

@@ -19,6 +19,7 @@ from app.api.v1.fonts import router as fonts_router
 from app.api.v1.feature_flags import router as feature_flags_router
 from app.api.v1.asks import router as asks_router, public_router as asks_public_router
 from app.api.v1.guestbooks import router as guestbooks_router, public_router as guestbooks_public_router
+from app.api.v1.tally import router as tally_router, public_router as tally_public_router
 from app.core.config import Settings, get_settings
 
 api_router = APIRouter()
@@ -40,6 +41,8 @@ api_router.include_router(asks_router)
 api_router.include_router(asks_public_router)
 api_router.include_router(guestbooks_router)
 api_router.include_router(guestbooks_public_router)
+api_router.include_router(tally_router)
+api_router.include_router(tally_public_router)
 
 
 class RootResponse(BaseModel):

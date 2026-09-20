@@ -168,7 +168,28 @@ def create_app() -> FastAPI:
                             signatures = await features_db.list_approved_guestbook(str(uid))
                 except Exception:
                     signatures = None
-                return HTMLResponse(render_public_profile(profile, request, widgets=widgets, default_fonts=default_fonts, asks=asks, signatures=signatures), headers={"Cache-Control": "no-store"})
+                tally = None
+                try:
+                    tally_settings = (profile.get("settings") or {}).get("tally")
+                    if admin_db.has_pool() and isinstance(tally_settings, dict) and tally_settings.get("q") and tally_settings.get("options"):
+                        from app.db import features_db
+                        uid = (profile.get("profile") or {}).get("uid")
+                        if uid:
+                            totals = await features_db.tally_totals(str(uid))
+                            by_option = {str(item.get("option")): int(item.get("count") or 0) for item in (totals.get("options") or [])}
+                            options = [
+                                {"name": str(option_name).strip(), "count": by_option.get(str(option_name).strip(), 0)}
+                                for option_name in (tally_settings.get("options") or [])
+                                if str(option_name).strip()
+                            ]
+                            tally = {
+                                "question": str(tally_settings.get("q") or ""),
+                                "options": options,
+                                "total": int(totals.get("total") or 0),
+                            }
+                except Exception:
+                    tally = None
+                return HTMLResponse(render_public_profile(profile, request, widgets=widgets, default_fonts=default_fonts, asks=asks, signatures=signatures, tally=tally), headers={"Cache-Control": "no-store"})
             alias = await current_handle_for(slug)
             if alias:
                 return username_redirect(f"/{alias}")
