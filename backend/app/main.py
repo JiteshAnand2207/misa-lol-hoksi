@@ -189,7 +189,16 @@ def create_app() -> FastAPI:
                             }
                 except Exception:
                     tally = None
-                return HTMLResponse(render_public_profile(profile, request, widgets=widgets, default_fonts=default_fonts, asks=asks, signatures=signatures, tally=tally), headers={"Cache-Control": "no-store"})
+                doodles = None
+                try:
+                    if admin_db.has_pool() and (profile.get("settings") or {}).get("doodles"):
+                        from app.db import features_db
+                        uid = (profile.get("profile") or {}).get("uid")
+                        if uid:
+                            doodles = await features_db.list_approved_doodles(str(uid))
+                except Exception:
+                    doodles = None
+                return HTMLResponse(render_public_profile(profile, request, widgets=widgets, default_fonts=default_fonts, asks=asks, signatures=signatures, tally=tally, doodles=doodles), headers={"Cache-Control": "no-store"})
             alias = await current_handle_for(slug)
             if alias:
                 return username_redirect(f"/{alias}")

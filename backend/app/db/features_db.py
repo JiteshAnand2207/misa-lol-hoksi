@@ -387,6 +387,134 @@ async def clear_tally(owner_id: str) -> bool:
     return result != "DELETE 0"
 
 
+async def ensure_misa_doodles() -> None:
+    pool = admin_db.database_pool()
+    statements = (
+        """
+        CREATE TABLE IF NOT EXISTS misa_doodles (
+            id UUID PRIMARY KEY,
+            owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            svg TEXT NOT NULL,
+            status VARCHAR(16) NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'approved')),
+            ip_hash CHAR(64) NOT NULL DEFAULT '',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS misa_doodles_owner_idx ON misa_doodles (owner_id, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS misa_doodles_public_idx ON misa_doodles (owner_id, created_at DESC) WHERE status = 'approved'",
+    )
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            for statement in statements:
+                await conn.execute(statement)
+
+
+async def ensure_feature_tables() -> None:
+    """Install every misa_* feature table. Idempotent and additive only."""
+    if not admin_db.has_pool():
+        return
+    await ensure_misa_asks()
+    await ensure_misa_guestbook()
+    await ensure_misa_tally()
+    await ensure_misa_doodles()
+
+
+def _doodle_row_to_dict(row: asyncpg.Record | None) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    return {
+        "id": str(row["id"]),
+        "ownerId": str(row["owner_id"]),
+        "svg": str(row["svg"] or ""),
+        "status": str(row["status"]),
+        "at": _now_iso(row["created_at"]),
+    }
+
+
+async def list_owner_doodles(owner_id: str) -> dict[str, list[dict[str, Any]]]:
+    pool = admin_db.database_pool()
+    rows = await pool.fetch(
+        """
+        SELECT id, owner_id, svg, status, created_at
+        FROM misa_doodles
+        WHERE owner_id = $1
+        ORDER BY created_at DESC
+        LIMIT 500
+        """,
+        UUID(owner_id),
+    )
+    pending: list[dict[str, Any]] = []
+    approved: list[dict[str, Any]] = []
+    for row in rows:
+        item = _doodle_row_to_dict(row)
+        if item is None:
+            continue
+        if item["status"] == "pending":
+            pending.append(item)
+        else:
+            approved.append(item)
+    return {"pending": pending, "approved": approved}
+
+
+async def list_approved_doodles(owner_id: str, limit: int = 40) -> list[dict[str, Any]]:
+    pool = admin_db.database_pool()
+    rows = await pool.fetch(
+        """
+        SELECT id, owner_id, svg, status, created_at
+        FROM misa_doodles
+        WHERE owner_id = $1 AND status = 'approved'
+        ORDER BY created_at DESC
+        LIMIT $2
+        """,
+        UUID(owner_id),
+        max(1, min(limit, 100)),
+    )
+    return [item for item in (_doodle_row_to_dict(row) for row in rows) if item is not None]
+
+
+async def create_doodle(owner_id: str, svg: str, *, ip: str = "") -> dict[str, Any]:
+    pool = admin_db.database_pool()
+    doodle_id = uuid4()
+    row = await pool.fetchrow(
+        """
+        INSERT INTO misa_doodles (id, owner_id, svg, ip_hash)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id, owner_id, svg, status, created_at
+        """,
+        doodle_id,
+        UUID(owner_id),
+        svg,
+        hash_ip(ip) if ip else "",
+    )
+    return _doodle_row_to_dict(row) or {}
+
+
+async def approve_doodle(owner_id: str, doodle_id: str) -> dict[str, Any] | None:
+    pool = admin_db.database_pool()
+    row = await pool.fetchrow(
+        """
+        UPDATE misa_doodles
+        SET status = 'approved'
+        WHERE id = $1 AND owner_id = $2 AND status = 'pending'
+        RETURNING id, owner_id, svg, status, created_at
+        """,
+        UUID(doodle_id),
+        UUID(owner_id),
+    )
+    return _doodle_row_to_dict(row)
+
+
+async def delete_doodle(owner_id: str, doodle_id: str) -> bool:
+    pool = admin_db.database_pool()
+    result = await pool.execute(
+        "DELETE FROM misa_doodles WHERE id = $1 AND owner_id = $2",
+        UUID(doodle_id),
+        UUID(owner_id),
+    )
+    return result == "DELETE 1"
+
+
 async def delete_ask(owner_id: str, ask_id: str) -> bool:
     pool = admin_db.database_pool()
     result = await pool.execute(

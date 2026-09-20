@@ -80,6 +80,22 @@ PUBLIC_TALLY_CSS = """
 .tally-btn:hover{background:#8d7df0}
 """
 
+PUBLIC_DOODLE_CSS = """
+.doodlebox{max-width:560px;margin:18px auto 0;text-align:left}
+.doodlebox h2{font-size:15px;margin:0 0 10px;letter-spacing:.02em}
+.doodle-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin:0 0 12px}
+.doodle-grid img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;background:#ffffff0d;border:1px solid #ffffff1a}
+.doodle-empty{color:#ffffff80;font-size:12px;margin:0 0 12px}
+.doodle-draw{display:flex;flex-direction:column;gap:8px;border-top:1px solid #ffffff1a;padding-top:12px}
+.doodle-canvas{width:100%;max-width:320px;aspect-ratio:8/5;height:auto;background:#000;border:1px solid #ffffff26;border-radius:10px;touch-action:none;cursor:crosshair}
+.doodle-actions{display:flex;gap:8px}
+.doodle-actions button{border:0;border-radius:10px;font:inherit;font-weight:600;padding:8px 14px;cursor:pointer}
+.doodle-post{background:#9b87f5;color:#fff}
+.doodle-post:hover{background:#8d7df0}
+.doodle-clear{background:#ffffff14;color:#fff}
+.doodle-note{margin:0;color:#ffffff80;font-size:11px;min-height:15px}
+"""
+
 def _color_with_alpha(value: str, alpha: float) -> str:
     raw = (value or "#ffffff").lstrip("#")
     if len(raw) == 3:
@@ -643,7 +659,7 @@ p.className="misa-sakura-petal";p.style.animation="misa-sakura-fall "+ft+"s line
 p.style.background="linear-gradient(120deg,rgba(255,183,197,.9),rgba(255,197,208,.9))";p.style.borderRadius=ri(14,14+Math.floor(Math.random()*10))+"px "+ri(1,Math.max(1,Math.floor(w/4)))+"px";p.style.height=h+"px";p.style.left=Math.random()*l.clientWidth-100+"px";p.style.marginTop=-(Math.floor(Math.random()*20)+15)+"px";p.style.width=w+"px";p.addEventListener("animationend",()=>p.remove(),{once:true});l.appendChild(p)};requestAnimationFrame(create)})();
 </script>"""
 
-def render_public_profile(config: dict, request: Request | None = None, widgets: list | None = None, default_fonts: list[dict] | None = None, asks: list | None = None, signatures: list | None = None, tally: dict | None = None) -> str:
+def render_public_profile(config: dict, request: Request | None = None, widgets: list | None = None, default_fonts: list[dict] | None = None, asks: list | None = None, signatures: list | None = None, tally: dict | None = None, doodles: list | None = None) -> str:
     incoming = config if isinstance(config, dict) else {}
     discord_live = incoming.get("discord") if isinstance(incoming.get("discord"), dict) else {}
     rank = incoming.get("rank") if isinstance(incoming.get("rank"), dict) else None
@@ -949,6 +965,7 @@ def render_public_profile(config: dict, request: Request | None = None, widgets:
     ask_box = _public_asks_markup(asks, username_raw, display_name, request) if settings.get("asks") else ""
     guestbook_block = _public_guestbook_markup(signatures, username_raw, display_name, request) if settings.get("guestbook") else ""
     tally_block = _public_tally_markup(tally, username_raw, request) if settings.get("tally") and tally else ""
+    doodles_block = _public_doodles_markup(doodles, username_raw, request) if settings.get("doodles") and doodles is not None else ""
     feature_block_markup = feature_blocks_html(settings)
     identity = (
         f'<div class="name-row">{display_name_tag}{guild_tag}{verified}{badges_tag}</div>'
@@ -957,6 +974,7 @@ def render_public_profile(config: dict, request: Request | None = None, widgets:
         f'{feature_block_markup}'
         f'{guestbook_block}'
         f'{tally_block}'
+        f'{doodles_block}'
         f'{ask_box}'
     )
     if layout == "Sleek":
@@ -1176,6 +1194,7 @@ h1{{margin:0;font-size:24px;font-weight:600;letter-spacing:-.04em;color:#fff}}
 {PUBLIC_ASK_CSS if (settings.get("asks") and asks is not None) else ""}
 {PUBLIC_GUESTBOOK_CSS if (settings.get("guestbook") and signatures is not None) else ""}
 {PUBLIC_TALLY_CSS if (settings.get("tally") and tally) else ""}
+{PUBLIC_DOODLE_CSS if (settings.get("doodles") and doodles is not None) else ""}
 </style></head>
 <body{body_class}{cursor_attr} data-profile-user="{username}" data-audio-enabled="{1 if audio_enabled else 0}" data-volume="{volume_ratio}" data-tilt="{card_tilt}" data-name-effect="{escape(username_effect, quote=True)}" data-tab-title="{tab_title_on}" data-bio-type-ms="{bio_type_ms}" data-bio-delete-ms="{bio_delete_ms}" data-bio-pause-ms="{bio_pause_ms}" data-page-enter="{escape(page_enter, quote=True)}" data-click-sound="{click_sound_on}"{f' data-click-src="{asset_src("clickSound")}"' if has_click else ""}>
 {background_tag}{video_tag}<div class="backdrop"></div>{effect_canvas_tag}{sakura_effect_tag}{rain_effect_tag}{effect_video_tag if background_effect == "None" else ""}
@@ -1319,6 +1338,55 @@ def _public_tally_markup(tally: dict, username_raw: str, request: Request | None
         f'<p class="tally-meta">{total} {total == 1 and "vote" or "votes"} so far</p>'
         "</section>"
     )
+
+
+def _public_doodles_markup(doodles: list | None, username_raw: str, request: Request | None) -> str:
+    """Render the chalkboard: approved doodles and a tiny drawing widget."""
+    if doodles is None:
+        return ""
+    imgs = "".join(
+        f'<img src="{escape(str(item.get("svg") or ""), quote=True)}" alt="visitor doodle" loading="lazy">'
+        for item in doodles
+        if isinstance(item, dict) and str(item.get("svg") or "").strip()
+    )
+    grid = (
+        f'<div class="doodle-grid">{imgs}</div>'
+        if imgs
+        else '<p class="doodle-empty">The wall is blank — chalk the first one below!</p>'
+    )
+    slug = escape(username_raw[:24], quote=True)
+    script = _DOODLE_SCRIPT.replace("__ENDPOINT__", f"/api/v1/profile/{slug}/doodles")
+    return (
+        f'<section class="section doodlebox" data-misa-doodles="1">'
+        "<h2>Doodle wall</h2>"
+        f"{grid}"
+        '<div class="doodle-draw">'
+        '<canvas id="doodle-canvas" class="doodle-canvas" width="320" height="200" aria-label="Chalkboard — draw here"></canvas>'
+        '<div class="doodle-actions">'
+        '<button type="button" class="doodle-clear" id="doodle-clear">Clear</button>'
+        '<button type="button" class="doodle-post" id="doodle-post">Chalk it</button>'
+        "</div>"
+        '<p class="doodle-note" id="doodle-note"></p>'
+        "</div>"
+        "</section>"
+        f"<script>{script}</script>"
+    )
+
+
+_DOODLE_SCRIPT = """(function(){var c=document.getElementById("doodle-canvas");if(!c)return;var ctx=c.getContext("2d");var key="__ENDPOINT__";
+ctx.fillStyle="#000";ctx.fillRect(0,0,c.width,c.height);ctx.strokeStyle="#fff";ctx.lineWidth=5;ctx.lineCap="round";
+var drawing=false;function pos(e){var r=c.getBoundingClientRect();return{x:(e.clientX-r.left)*(c.width/r.width),y:(e.clientY-r.top)*(c.height/r.height)};}
+c.addEventListener("pointerdown",function(e){drawing=true;ctx.beginPath();var p=pos(e);ctx.moveTo(p.x,p.y);});
+c.addEventListener("pointermove",function(e){if(!drawing)return;var p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();});
+window.addEventListener("pointerup",function(){drawing=false;});
+document.getElementById("doodle-clear").addEventListener("click",function(){ctx.fillStyle="#000";ctx.fillRect(0,0,c.width,c.height);ctx.beginPath();});
+document.getElementById("doodle-post").addEventListener("click",function(){var btn=this;if(btn.getAttribute("aria-busy"))return;var data=c.toDataURL("image/png");
+btn.setAttribute("aria-busy","true");var note=document.getElementById("doodle-note");
+fetch(key,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({svg:data})})
+.then(function(r){return r.json().catch(function(){return{};}).then(function(d){return{ok:r.ok,d:d};});})
+.then(function(res){if(!res.ok){note.textContent=(res.d&&typeof res.d.detail==="string")?res.d.detail:"Could not post that just now.";return;}
+note.textContent="Chalked! It needs the owner's approval before it shows.";ctx.fillStyle="#000";ctx.fillRect(0,0,c.width,c.height);ctx.beginPath();})
+.catch(function(){note.textContent="Could not reach the server.";}).then(function(){btn.removeAttribute("aria-busy");});});})();"""
 
 
 def _public_sections_markup(config: dict, username: str) -> str:
