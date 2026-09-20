@@ -14,6 +14,28 @@ from app.core.widgets import safe_widget_url
 from app.core.social_icons import social_icon_markup
 from app.core.social_prefixes import DEFAULT_ICON_COLOR, resolve_icon_color
 
+PUBLIC_ASK_MAX_QUESTION = 400
+PUBLIC_ASK_MAX_AUTHOR = 48
+
+PUBLIC_ASK_CSS = """
+.askbox{max-width:560px;margin:18px auto 0;text-align:left}
+.askbox h2{font-size:15px;margin:0 0 10px;letter-spacing:.02em}
+.ask-form{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.ask-form textarea,.ask-form input{width:100%;box-sizing:border-box;background:#ffffff0d;border:1px solid #ffffff26;border-radius:10px;color:inherit;font:inherit;padding:10px 12px;outline:none}
+.ask-form textarea{resize:vertical;min-height:56px}
+.ask-form textarea:focus,.ask-form input:focus{border-color:#9b87f588}
+.ask-form-row{display:flex;gap:8px}
+.ask-form-row input{flex:1}
+.ask-form button{border:0;border-radius:10px;background:#9b87f5;color:#fff;font:inherit;font-weight:600;padding:10px 18px;cursor:pointer}
+.ask-form button:hover{background:#8d7df0}
+.ask-notice{color:#9b87f5;font-size:13px;margin:0 0 10px}
+.ask-list{display:flex;flex-direction:column;gap:10px}
+.ask-item{background:#ffffff0d;border:1px solid #ffffff1a;border-radius:12px;padding:12px 14px}
+.ask-q{margin:0 0 6px;font-size:14px;line-height:1.45}
+.ask-answer{margin:0;color:#ffffffb3;font-size:13px;line-height:1.5;white-space:normal}
+.ask-empty{margin:0;color:#ffffff80;font-size:12px}
+"""
+
 def _color_with_alpha(value: str, alpha: float) -> str:
     raw = (value or "#ffffff").lstrip("#")
     if len(raw) == 3:
@@ -577,7 +599,7 @@ p.className="misa-sakura-petal";p.style.animation="misa-sakura-fall "+ft+"s line
 p.style.background="linear-gradient(120deg,rgba(255,183,197,.9),rgba(255,197,208,.9))";p.style.borderRadius=ri(14,14+Math.floor(Math.random()*10))+"px "+ri(1,Math.max(1,Math.floor(w/4)))+"px";p.style.height=h+"px";p.style.left=Math.random()*l.clientWidth-100+"px";p.style.marginTop=-(Math.floor(Math.random()*20)+15)+"px";p.style.width=w+"px";p.addEventListener("animationend",()=>p.remove(),{once:true});l.appendChild(p)};requestAnimationFrame(create)})();
 </script>"""
 
-def render_public_profile(config: dict, request: Request | None = None, widgets: list | None = None, default_fonts: list[dict] | None = None) -> str:
+def render_public_profile(config: dict, request: Request | None = None, widgets: list | None = None, default_fonts: list[dict] | None = None, asks: list | None = None) -> str:
     incoming = config if isinstance(config, dict) else {}
     discord_live = incoming.get("discord") if isinstance(incoming.get("discord"), dict) else {}
     rank = incoming.get("rank") if isinstance(incoming.get("rank"), dict) else None
@@ -880,10 +902,12 @@ def render_public_profile(config: dict, request: Request | None = None, widgets:
     )
     display_name_tag = f'<h1 id="display-name" class="{name_class}" style="{name_style}">{display_name}</h1>' if show_display_name else ""
     handle_tag = f'<p class="handle">@{username}</p>' if show_username else ""
+    ask_box = _public_asks_markup(asks, username_raw, display_name, request) if settings.get("asks") else ""
     identity = (
         f'<div class="name-row">{display_name_tag}{guild_tag}{verified}{badges_tag}</div>'
         f'{handle_tag}{description_tag}{location_tag}'
         f'<div class="socials">{links}</div>{_public_widgets_markup(widgets)}{_public_sections_markup(config, username_raw)}'
+        f'{ask_box}'
     )
     if layout == "Sleek":
         card_inner = f'<div class="sleek-hero">{banner_tag}{avatar_tag}</div><div class="sleek-body">{identity}</div>'
@@ -1098,6 +1122,7 @@ h1{{margin:0;font-size:24px;font-weight:600;letter-spacing:-.04em;color:#fff}}
 .enter-pop{{animation:enter-pop .45s cubic-bezier(.22,1,.36,1) both}}
 @media(max-width:639px){{body{{height:100vh;height:100dvh;min-height:100dvh;justify-content:center;padding:0;overflow:hidden}}.card-stage{{position:fixed;left:50%;top:50%;width:min(calc(100vw - 24px),{frame_width}px);max-width:calc(100vw - 24px);transform:translate(-50%,-50%) scale(var(--mobile-frame-scale,var(--frame-scale)));transform-origin:center}}}}
 @media (prefers-reduced-motion:reduce){{.enter-fade,.enter-unfold,.enter-pop{{animation:none}}.codrops-rain-effect{{display:none}}}}
+{PUBLIC_ASK_CSS if (settings.get("asks") and asks is not None) else ""}
 </style></head>
 <body{body_class}{cursor_attr} data-profile-user="{username}" data-audio-enabled="{1 if audio_enabled else 0}" data-volume="{volume_ratio}" data-tilt="{card_tilt}" data-name-effect="{escape(username_effect, quote=True)}" data-tab-title="{tab_title_on}" data-bio-type-ms="{bio_type_ms}" data-bio-delete-ms="{bio_delete_ms}" data-bio-pause-ms="{bio_pause_ms}" data-page-enter="{escape(page_enter, quote=True)}" data-click-sound="{click_sound_on}"{f' data-click-src="{asset_src("clickSound")}"' if has_click else ""}>
 {background_tag}{video_tag}<div class="backdrop"></div>{effect_canvas_tag}{sakura_effect_tag}{rain_effect_tag}{effect_video_tag if background_effect == "None" else ""}
@@ -1118,6 +1143,49 @@ h1{{margin:0;font-size:24px;font-weight:600;letter-spacing:-.04em;color:#fff}}
 {PUBLIC_DISCORD_STATUS_SCRIPT if status_tag else ""}
 {PUBLIC_LYRICS_SCRIPT}
 </body></html>"""
+
+
+def _public_asks_markup(asks: list | None, username_raw: str, display_name: str, request: Request | None) -> str:
+    """Render the ask-the-owner block: the submission form plus answered asks."""
+    if asks is None:
+        return ""
+    notice = ""
+    if request is not None and "sent" in request.query_params:
+        notice = '<p class="ask-notice">Sent! Thanks.</p>'
+    cards: list[str] = []
+    for item in asks:
+        if not isinstance(item, dict):
+            continue
+        question = str(item.get("q") or "").strip()
+        answer = str(item.get("a") or "").strip()
+        if not question and not answer:
+            continue
+        question_html = escape(question[:PUBLIC_ASK_MAX_QUESTION])
+        answer_html = "<br>".join(escape(line) for line in answer.splitlines()) if answer else ""
+        answer_tag = f'<p class="ask-answer">{answer_html}</p>' if answer_html else ""
+        cards.append(f'<article class="ask-item"><h3 class="ask-q">{question_html}</h3>{answer_tag}</article>')
+    list_html = (
+        f'<div class="ask-list">{"".join(cards)}</div>'
+        if cards
+        else '<p class="ask-empty">No questions answered yet — ask one below!</p>'
+    )
+    slug = escape(username_raw[:24], quote=True)
+    recipient = escape(str(display_name or username_raw))
+    return (
+        '<section class="section askbox" data-misa-ask="1">'
+        "<h2>Ask me anything</h2>"
+        f"{notice}"
+        f'<form class="ask-form" method="post" action="/api/v1/profile/{slug}/asks">'
+        f'<label class="sr-only" for="ask-question">Your anonymous question for {recipient}</label>'
+        f'<textarea id="ask-question" name="question" rows="2" maxlength="{PUBLIC_ASK_MAX_QUESTION}" required placeholder="Ask {recipient} a question — it stays anonymous"></textarea>'
+        '<div class="ask-form-row">'
+        f'<input name="author" maxlength="{PUBLIC_ASK_MAX_AUTHOR}" placeholder="Your name (optional)" autocomplete="off">'
+        "<button type=\"submit\">Send</button>"
+        "</div>"
+        "</form>"
+        f"{list_html}"
+        "</section>"
+    )
 
 
 def _public_sections_markup(config: dict, username: str) -> str:

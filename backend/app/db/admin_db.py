@@ -66,6 +66,8 @@ async def init_admin_db(
     await ensure_constellation_tables()
     await ensure_apple_support()
     await ensure_admin_auth_tables(root_email)
+    from app.db import features_db
+    await features_db.ensure_feature_tables()
 
 
 async def close_admin_db() -> None:
