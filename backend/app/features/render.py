@@ -186,8 +186,19 @@ def has_feature_blocks(settings: dict) -> bool:
 
 
 def stripped_secret(settings: dict) -> dict:
-    """Public-safe copy of settings: never leaks secret words or hashes."""
+    """Public-safe copy of settings: never leaks secret words, hashes, urls or labels.
+
+    The reveal is a game — nothing is shown to visitors until their submitted word
+    hashes to the owner's stored wordHash server-side.
+    """
     cleaned = dict(settings)
     secret = cleaned.get("secret") if isinstance(cleaned.get("secret"), dict) else {}
-    cleaned["secret"] = {"word": "", "wordHash": "", "url": secret.get("url") or "", "label": secret.get("label") or ""}
+    has_secret = bool(secret.get("word") or secret.get("wordHash"))
+    cleaned["secret"] = {
+        "word": "",
+        "wordHash": "",
+        "url": "",
+        "label": "",
+        "hasSecret": has_secret,
+    }
     return cleaned

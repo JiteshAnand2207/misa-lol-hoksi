@@ -127,4 +127,4 @@ def test_secret_never_leaked_in_render():
 
 def test_stripped_secret_removes_word_and_hash():
     cleaned = stripped_secret({"secret": {"word": "otto", "wordHash": "z" * 64, "url": "https://e", "label": "l"}})
-    assert cleaned["secret"] == {"word": "", "wordHash": "", "url": "https://e", "label": "l"}
+    assert cleaned["secret"] == {"word": "", "wordHash": "", "url": "", "label": "", "hasSecret": True}
