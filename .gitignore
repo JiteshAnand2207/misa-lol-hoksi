@@ -43,3 +43,5 @@ Thumbs.db
 **/tests/
 .env.example
 **/.env.example
+
+**/.venv/
