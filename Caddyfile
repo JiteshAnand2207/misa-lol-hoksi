@@ -1,0 +1,113 @@
+{
+	auto_https off
+}
+
+(tunnel_headers) {
+	header_up X-Forwarded-Proto https
+	header_up X-Forwarded-Host {http.request.host}
+	header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}
+	header_up X-Real-IP {http.request.header.CF-Connecting-IP}
+	header_down -Server
+	header_down -X-Powered-By
+}
+
+http://misa.lol, http://www.misa.lol {
+	encode gzip
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	
+	@admin_login path /admin/login /admin/login/*
+	handle @admin_login {
+		redir /admin 302
+	}
+	
+	@admin_short path /admin /admin/*
+	handle @admin_short {
+		rewrite * /dashboard{uri}
+		reverse_proxy frontend:3000 {
+			import tunnel_headers
+		}
+	}
+	
+	@admin_internal path /dashboard/admin /dashboard/admin/*
+	handle @admin_internal {
+		reverse_proxy frontend:3000 {
+			import tunnel_headers
+		}
+	}
+
+	@constellation_public path /c/*
+	handle @constellation_public {
+		rewrite * /dashboard{uri}
+		reverse_proxy frontend:3000 {
+			import tunnel_headers
+		}
+	}
+
+	handle /dashboard* {
+		reverse_proxy frontend:3000 {
+			import tunnel_headers
+		}
+	}
+	handle {
+		reverse_proxy api:8000 {
+			import tunnel_headers
+		}
+	}
+}
+
+http://ukvhq.dev {
+	encode gzip
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	
+	handle /api* {
+		reverse_proxy api:8000 {
+			import tunnel_headers
+		}
+	}
+
+	
+	
+	handle_path /m/login* {
+		rewrite * /dashboard/admin/login
+		reverse_proxy frontend:3000 {
+			import tunnel_headers
+		}
+	}
+	handle_path /m* {
+		rewrite * /dashboard/admin
+		reverse_proxy frontend:3000 {
+			import tunnel_headers
+		}
+	}
+
+	
+	handle /dashboard* {
+		reverse_proxy frontend:3000 {
+			import tunnel_headers
+		}
+	}
+	handle /_next* {
+		reverse_proxy frontend:3000 {
+			import tunnel_headers
+		}
+	}
+
+	handle / {
+		redir https://ukvhq.dev/m 302
+	}
+	handle {
+		respond "Not found" 404
+	}
+}

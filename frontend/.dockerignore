@@ -1,0 +1,9 @@
+node_modules
+.next
+data
+lib/server
+app/api
+tsconfig.tsbuildinfo
+.env
+.env.local
+.env*.local
