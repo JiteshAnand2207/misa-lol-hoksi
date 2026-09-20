@@ -2,6 +2,7 @@ from typing import Any
 
 from app.core.profile_sanitize import apply_badge_ownership, sanitize_profile_config
 from app.db import data_api
+from app.features import sanitize as feature_sanitize
 from app.models import User
 
 
@@ -79,6 +80,7 @@ def default_public_profile(user: User) -> dict[str, Any]:
             "ogOverlayAvatar": True,
             "ogOverlayName": True,
             "ogOverlayAddress": True,
+            **(feature_sanitize.defaults()),
         },
         "assets": {
             "avatar": {"url": user.avatar_url},

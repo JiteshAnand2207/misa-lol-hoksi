@@ -5,6 +5,7 @@ from urllib.parse import urlparse
 
 from app.core.network_safety import safe_media_url, safe_public_url
 from app.core.social_prefixes import compose_social_value, host_allowed
+from app.features import sanitize as feature_sanitize
 
 HEX_COLOR = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
 SAFE_ICON = re.compile(r"^data:image/(?:png|jpeg|jpg|webp|gif|ico|x-icon|vnd\.microsoft\.icon);base64,", re.I)
@@ -174,6 +175,7 @@ def _sanitize_settings(settings: dict[str, Any]) -> dict[str, Any]:
     cleaned["entryText"] = str(cleaned.get("entryText") or "click to enter...")[:80]
     cleaned["ogTitle"] = _plain_text(cleaned.get("ogTitle"), 70)
     cleaned["ogDescription"] = _plain_text(cleaned.get("ogDescription"), 200)
+    cleaned.update(feature_sanitize.sanitize_all(cleaned))
     return cleaned
 
 
