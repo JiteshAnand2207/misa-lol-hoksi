@@ -1,19 +1,21 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { colorRgb } from "@/lib/effect-colors";
 import type { BackgroundEffect } from "@/lib/types";
 import { SakuraEffectLayer } from "./SakuraEffectLayer";
 import { CodropsRainEffectLayer } from "./CodropsRainEffectLayer";
 
 type Particle = { x: number; y: number; size: number; speed: number; drift: number; phase: number; alpha: number };
 
-export function BackgroundEffectLayer({ effect, className = "" }: { effect: BackgroundEffect; className?: string }) {
+export function BackgroundEffectLayer({ effect, color, className = "" }: { effect: BackgroundEffect; color?: string; className?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || effect === "None") return;
     const context = canvas.getContext("2d");
     if (!context) return;
+    const rgb = colorRgb(color, effect === "Fireflies" ? "#fcd271" : "#ffffff");
     let width = 1, height = 1, frame = 0, animation = 0, wind = 0;
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const countFor = () => effect === "Fireflies" ? Math.max(60, Math.min(200, Math.round(width * height / 6000))) : effect === "Sakura" ? Math.max(10, Math.min(28, Math.round(width / 80))) : effect === "Snow" ? Math.max(24, Math.min(64, Math.round(width * height / 14500))) : Math.max(12, Math.min(effect === "Rain" ? 140 : 48, Math.round(effect === "Rain" ? width * height / 5200 : width / 28)));
@@ -33,7 +35,7 @@ export function BackgroundEffectLayer({ effect, className = "" }: { effect: Back
       particles = Array.from({ length: reduced ? Math.min(22, countFor()) : countFor() }, () => create());
     };
     const drawFlake = (p: Particle) => {
-      context.save(); context.translate(p.x, p.y); context.strokeStyle = "rgba(255,255,255," + p.alpha + ")"; context.lineWidth = Math.max(.7, p.size / 5);
+      context.save(); context.translate(p.x, p.y); context.strokeStyle = "rgba(" + rgb + "," + p.alpha + ")"; context.lineWidth = Math.max(.7, p.size / 5);
       for (let arm = 0; arm < 3; arm += 1) { context.rotate(Math.PI / 3); context.beginPath(); context.moveTo(-p.size, 0); context.lineTo(p.size, 0); context.stroke(); }
       context.restore();
     };
@@ -74,8 +76,8 @@ export function BackgroundEffectLayer({ effect, className = "" }: { effect: Back
         if (effect === "Rain") drawRainDrop(p);
         else if (effect === "Sakura") { const petalWidth = p.size * .78; const petalHeight = p.size; context.globalAlpha *= .9 - Math.min(.7, p.y / Math.max(1, height) * .7); context.translate(p.x, p.y); context.rotate(Math.sin(frame / 34 + p.phase) * .48 + p.phase); if (Math.sin(frame / 42 + p.phase) < 0) context.scale(-1, 1); const petal = context.createLinearGradient(-petalWidth / 2, -petalHeight / 2, petalWidth / 2, petalHeight / 2); petal.addColorStop(0, "rgba(255,183,197,.92)"); petal.addColorStop(1, "rgba(255,197,208,.9)"); context.fillStyle = petal; context.beginPath(); context.moveTo(-petalWidth * .52, 0); context.bezierCurveTo(-petalWidth * .35, -petalHeight * .48, petalWidth * .32, -petalHeight * .55, petalWidth * .52, 0); context.bezierCurveTo(petalWidth * .3, petalHeight * .42, -petalWidth * .25, petalHeight * .55, -petalWidth * .52, 0); context.closePath(); context.fill(); }
         else if (effect === "Snowflakes") drawFlake(p);
-        else if (effect === "Fireflies") { const glow = context.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size * 3.2); glow.addColorStop(0, "rgba(252,210,113,1)"); glow.addColorStop(.24, "rgba(252,210,113,.7)"); glow.addColorStop(1, "rgba(252,210,113,0)"); context.fillStyle = glow; context.beginPath(); context.arc(p.x, p.y, p.size * 3.2, 0, Math.PI * 2); context.fill(); }
-        else { context.fillStyle = "rgba(255,255,255,.82)"; context.beginPath(); context.arc(p.x, p.y, p.size, 0, Math.PI * 2); context.fill(); }
+        else if (effect === "Fireflies") { const glow = context.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size * 3.2); glow.addColorStop(0, "rgba(" + rgb + ",1)"); glow.addColorStop(.24, "rgba(" + rgb + ",.7)"); glow.addColorStop(1, "rgba(" + rgb + ",0)"); context.fillStyle = glow; context.beginPath(); context.arc(p.x, p.y, p.size * 3.2, 0, Math.PI * 2); context.fill(); }
+        else { context.fillStyle = "rgba(" + rgb + ",.82)"; context.beginPath(); context.arc(p.x, p.y, p.size, 0, Math.PI * 2); context.fill(); }
         context.restore();
       }
     };
@@ -87,9 +89,9 @@ export function BackgroundEffectLayer({ effect, className = "" }: { effect: Back
     if (effect === "Snow") document.addEventListener("pointermove", pointerWind, { passive: true });
     document.addEventListener("visibilitychange", visibility);
     return () => { cancelAnimationFrame(animation); observer.disconnect(); document.removeEventListener("visibilitychange", visibility); document.removeEventListener("pointermove", pointerWind); };
-  }, [effect]);
+  }, [effect, color]);
   if (effect === "None") return null;
-  if (effect === "Sakura") return <SakuraEffectLayer className={className} />;
+  if (effect === "Sakura") return <SakuraEffectLayer className={className} color={color} />;
   if (effect === "Rain") return <CodropsRainEffectLayer className={className} />;
   return <canvas ref={canvasRef} className={"pointer-events-none absolute inset-0 h-full w-full " + className} data-background-effect={effect} aria-hidden="true" />;
 

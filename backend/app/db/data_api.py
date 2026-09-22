@@ -254,6 +254,9 @@ async def list_user_badge_grants(user_id: str) -> list[dict]:
 
 async def save_profile(user_id: str, config: dict) -> dict:
     from app.core.profiles import unwrap_profile_config
+    from app.core.premium import has_premium, protect_write
+    existing = unwrap_profile_config(await get_profile(user_id))
+    config = protect_write(config, existing, await has_premium(user_id))
     from app.db.admin_db import has_pool, save_profile as db_save_profile
     if has_pool():
         saved = await db_save_profile(user_id, config)

@@ -7,10 +7,13 @@ services:
     depends_on:
       frontend:
         condition: service_healthy
+      api:
+        condition: service_healthy
     ports:
       - "127.0.0.1:8080:80"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./templates:/srv/templates:ro
       - caddy_data:/data
       - caddy_config:/config
     networks:
@@ -23,18 +26,53 @@ services:
       args:
         API_PROXY_TARGET: http://api:8000
         NEXT_PUBLIC_MEDIA_HOSTS: "${NEXT_PUBLIC_MEDIA_HOSTS:-r2.misa.lol}"
+        MISA_NEXT_CORE_ROLLOUT: "${MISA_NEXT_CORE_ROLLOUT:-false}"
     restart: unless-stopped
     environment:
       NODE_ENV: production
       MISA_BACKEND_URL: http://api:8000
+      MISA_NEXT_CORE_READS: "true"
+      MISA_NEXT_CORE_ROLLOUT: "${MISA_NEXT_CORE_ROLLOUT:-false}"
+      MISA_INSTANCE_NAME: frontend
+      MISA_APP_NAME: misa
+      MISA_APP_VERSION: 0.1.0
+      MISA_ENVIRONMENT: "${MISA_ENVIRONMENT:-production}"
+      MISA_DOMAIN: "${MISA_DOMAIN:-misa.lol}"
+      MISA_PUBLIC_BASE_URL: "${MISA_PUBLIC_BASE_URL:-https://misa.lol}"
+      MISA_ADMIN_PUBLIC_URL: "${MISA_ADMIN_PUBLIC_URL:-https://ukvhq.dev/m}"
+      DATABASE_URL: "${DATABASE_URL:?Set DATABASE_URL in .env}"
+      DRAGONFLY_URL: redis://dragonfly:6379/0
+      MISA_ADMIN_USER_IDS: "${MISA_ADMIN_USER_IDS:-}"
+      SUPER_ADMIN_EMAIL: "${SUPER_ADMIN_EMAIL:?Set SUPER_ADMIN_EMAIL in .env}"
+      MISA_ADMIN_TOKEN_SECRET: "${MISA_ADMIN_TOKEN_SECRET:?Set MISA_ADMIN_TOKEN_SECRET in .env}"
+      MISA_EMAIL_API_URL: "${MISA_EMAIL_API_URL:-}"
+      MISA_EMAIL_API_KEY: "${MISA_EMAIL_API_KEY:-}"
+      MISA_EMAIL_FROM: "${MISA_EMAIL_FROM:-Misa.lol <no-reply@misa.lol>}"
+      DATA_API_KEY: "${DATA_API_KEY:-}"
+      MISA_GOOGLE_CLIENT_ID: "${MISA_GOOGLE_CLIENT_ID:-}"
+      MISA_GOOGLE_CLIENT_SECRET: "${MISA_GOOGLE_CLIENT_SECRET:-}"
+      MISA_DISCORD_CLIENT_ID: "${MISA_DISCORD_CLIENT_ID:-}"
+      MISA_DISCORD_CLIENT_SECRET: "${MISA_DISCORD_CLIENT_SECRET:-}"
+      DISCORD_SERVER_INVITE: "${DISCORD_SERVER_INVITE:-${MISA_DISCORD_SERVER_INVITE:-}}"
+      MISA_TELEGRAM_BOT_TOKEN: "${MISA_TELEGRAM_BOT_TOKEN:-}"
+      MISA_TELEGRAM_BOT_USERNAME: "${MISA_TELEGRAM_BOT_USERNAME:-}"
       MISA_TURNSTILE_SITE_KEY: "${MISA_TURNSTILE_SITE_KEY:-}"
+      MISA_TURNSTILE_SECRET_KEY: "${MISA_TURNSTILE_SECRET_KEY:-}"
+      R2_BUCKET: "${R2_BUCKET:-}"
+      R2_ACCESS_KEY_ID: "${R2_ACCESS_KEY_ID:-}"
+      R2_SECRET_ACCESS_KEY: "${R2_SECRET_ACCESS_KEY:-}"
+      R2_ENDPOINT: "${R2_ENDPOINT:-}"
+      R2_PUBLIC_BASE_URL: "${R2_PUBLIC_BASE_URL:-}"
     depends_on:
+      dragonfly:
+        condition: service_started
       api:
         condition: service_healthy
     expose:
       - "3000"
     networks:
       - app
+      - data
       - frontend_egress
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/dashboard').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
@@ -79,15 +117,15 @@ services:
       MISA_TELEGRAM_BOT_USERNAME: "${MISA_TELEGRAM_BOT_USERNAME:-}"
       MISA_TURNSTILE_SITE_KEY: "${MISA_TURNSTILE_SITE_KEY:-}"
       MISA_TURNSTILE_SECRET_KEY: "${MISA_TURNSTILE_SECRET_KEY:-}"
-      MISA_SUPABASE_URL: "${MISA_SUPABASE_URL:-}"
-      MISA_SUPABASE_SERVICE_ROLE_KEY: "${MISA_SUPABASE_SERVICE_ROLE_KEY:-}"
-      MISA_STORAGE_BUCKET: "${MISA_STORAGE_BUCKET:-misa-assets}"
-      R2_ACCOUNT_ID: "${R2_ACCOUNT_ID:-}"
       R2_BUCKET: "${R2_BUCKET:-}"
       R2_ACCESS_KEY_ID: "${R2_ACCESS_KEY_ID:-}"
       R2_SECRET_ACCESS_KEY: "${R2_SECRET_ACCESS_KEY:-}"
       R2_ENDPOINT: "${R2_ENDPOINT:-}"
       R2_PUBLIC_BASE_URL: "${R2_PUBLIC_BASE_URL:-}"
+      MISA_SUPABASE_URL: "${MISA_SUPABASE_URL:-}"
+      MISA_SUPABASE_SERVICE_ROLE_KEY: "${MISA_SUPABASE_SERVICE_ROLE_KEY:-}"
+      MISA_STORAGE_BUCKET: "${MISA_STORAGE_BUCKET:-misa-assets}"
+      R2_ACCOUNT_ID: "${R2_ACCOUNT_ID:-}"
     depends_on:
       data-api:
         condition: service_healthy

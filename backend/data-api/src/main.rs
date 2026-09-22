@@ -1,7 +1,5 @@
-mod api;
-mod db;
-
 use anyhow::{Context, Result};
+use prostgres_db::{api, db, features};
 use api::AppState;
 use axum::middleware;
 use axum::routing::{get, post};
@@ -42,6 +40,7 @@ async fn main() -> Result<()> {
         .route("/v1/users/{id}/providers/{provider}", post(api::unlink_provider))
         .route("/v1/users/{id}", get(api::get_user).patch(api::update_user).delete(api::delete_user))
         .route("/v1/profiles/{id}", get(api::get_profile).put(api::save_profile))
+        .merge(features::router())
         .layer(middleware::from_fn_with_state(state.clone(), api::require_key));
 
     let app = Router::new()

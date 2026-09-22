@@ -48,6 +48,22 @@ async def init_admin_db(
     )
     if not initialize_schema:
         return
+    # Multiple Gunicorn workers execute lifespan concurrently.  A transaction-scoped
+    # lock serializes bootstrap without leaving a session-level lock behind if a
+    # worker is terminated.  Bootstrap can exceed the pool's normal 30-second
+    # command timeout on an existing production schema, so only lock acquisition
+    # receives the bounded extended timeout.
+    async with _pool.acquire() as schema_lock:
+        async with schema_lock.transaction():
+            await schema_lock.execute(
+                "SELECT pg_advisory_xact_lock(hashtext('misa_admin_schema_bootstrap'))",
+                timeout=120,
+            )
+            await _ensure_admin_schema(root_email)
+
+
+async def _ensure_admin_schema(root_email: str) -> None:
+    """Run startup schema work once when multiple application workers boot."""
     await ensure_badge_icons()
     await ensure_verification_requests()
     await ensure_discord_links()
@@ -66,8 +82,6 @@ async def init_admin_db(
     await ensure_constellation_tables()
     await ensure_apple_support()
     await ensure_admin_auth_tables(root_email)
-    from app.db import features_db
-    await features_db.ensure_feature_tables()
 
 
 async def close_admin_db() -> None:
@@ -230,11 +244,13 @@ async def ensure_discord_links() -> None:
                 show_avatar BOOLEAN NOT NULL DEFAULT TRUE,
                 show_decoration BOOLEAN NOT NULL DEFAULT TRUE,
                 show_guild_tag BOOLEAN NOT NULL DEFAULT TRUE,
+                show_status BOOLEAN NOT NULL DEFAULT TRUE,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
             """
         )
+        await _pool.execute("ALTER TABLE discord_links ADD COLUMN IF NOT EXISTS show_status BOOLEAN NOT NULL DEFAULT TRUE")
     except (asyncpg.PostgresError, OSError):
         return
 
@@ -1291,14 +1307,15 @@ async def save_discord_link(
     show_avatar: bool,
     show_decoration: bool,
     show_guild_tag: bool,
+    show_status: bool = True,
 ) -> dict[str, Any]:
     row = await _get_pool().fetchrow(
         """
         INSERT INTO discord_links (
             user_id, discord_id, refresh_token, access_token, access_expires_at,
-            show_avatar, show_decoration, show_guild_tag, updated_at
+            show_avatar, show_decoration, show_guild_tag, show_status, updated_at
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
         ON CONFLICT (user_id) DO UPDATE SET
             discord_id = EXCLUDED.discord_id,
             refresh_token = EXCLUDED.refresh_token,
@@ -1307,9 +1324,10 @@ async def save_discord_link(
             show_avatar = EXCLUDED.show_avatar,
             show_decoration = EXCLUDED.show_decoration,
             show_guild_tag = EXCLUDED.show_guild_tag,
+            show_status = EXCLUDED.show_status,
             updated_at = NOW()
         RETURNING user_id, discord_id, refresh_token, access_token, access_expires_at,
-                  show_avatar, show_decoration, show_guild_tag
+                  show_avatar, show_decoration, show_guild_tag, show_status
         """,
         UUID(user_id),
         discord_id,
@@ -1319,6 +1337,7 @@ async def save_discord_link(
         show_avatar,
         show_decoration,
         show_guild_tag,
+        show_status,
     )
     return dict(row) if row else {}
 
@@ -1333,7 +1352,7 @@ async def update_discord_prefs(user_id: str, **prefs: bool) -> dict[str, Any] | 
         SET show_avatar = $2, show_decoration = $3, show_guild_tag = $4, updated_at = NOW()
         WHERE user_id = $1
         RETURNING user_id, discord_id, refresh_token, access_token, access_expires_at,
-                  show_avatar, show_decoration, show_guild_tag
+                  show_avatar, show_decoration, show_guild_tag, show_status
         """,
         UUID(user_id),
         prefs.get("show_avatar", bool(current["show_avatar"])),
@@ -1375,6 +1394,8 @@ async def get_share_card_bits(username: str) -> dict[str, Any] | None:
         SELECT
             u.username,
             u.display_name,
+            COALESCE(pr.config->'_premium_base', pr.config->'config'->'_premium_base') AS premium_base,
+            EXISTS(SELECT 1 FROM premium_entitlements pe WHERE pe.user_id=u.id AND pe.active=TRUE AND (pe.expires_at IS NULL OR pe.expires_at>NOW())) AS premium_active,
             COALESCE(
                 pr.config->'settings',
                 pr.config->'config'->'settings',
@@ -1415,12 +1436,15 @@ async def get_share_card_bits(username: str) -> dict[str, Any] | None:
     if not str(identity.get("displayName") or "").strip():
         identity = dict(identity)
         identity["displayName"] = str(row.get("display_name") or row.get("username") or username)
+    from app.core.premium import public_projection
+    projection = public_projection({"settings": settings, "_premium_base": row["premium_base"], "assets": {"ogImage": {"url": row["og_image"]}, "favicon": {"url": row["favicon"]}}}, bool(row["premium_active"]))
+    settings = projection["settings"]
     return {
         "username": str(row["username"] or username),
         "settings": settings,
         "identity": identity,
-        "og_image": str(row["og_image"] or "").strip() or None,
-        "favicon": str(row["favicon"] or "").strip() or None,
+        "og_image": (projection["assets"].get("ogImage") or {}).get("url"),
+        "favicon": (projection["assets"].get("favicon") or {}).get("url"),
         "avatar": str(row["avatar"] or "").strip() or None,
         "background": str(row["background"] or "").strip() or None,
         "version": int(row["version"] or 0),
@@ -1430,10 +1454,11 @@ async def get_share_card_bits(username: str) -> dict[str, Any] | None:
 async def get_public_asset_url(username: str, kind: str) -> str | None:
     row = await _get_pool().fetchrow(
         """
-        SELECT COALESCE(
-            config->'assets'->$2->>'url',
-            config->'config'->'assets'->$2->>'url'
-        ) AS url
+        SELECT CASE WHEN $2 = ANY(ARRAY['customFont','clickSound','entryIcon','ogImage','favicon'])
+            AND COALESCE(config->'_premium_base',config->'config'->'_premium_base') IS NOT NULL
+            AND NOT EXISTS(SELECT 1 FROM premium_entitlements pe WHERE pe.user_id=u.id AND pe.active=TRUE AND (pe.expires_at IS NULL OR pe.expires_at>NOW()))
+            THEN COALESCE(config->'_premium_base'->'assets'->$2->>'url',config->'config'->'_premium_base'->'assets'->$2->>'url')
+            ELSE COALESCE(config->'assets'->$2->>'url',config->'config'->'assets'->$2->>'url') END AS url
         FROM profiles p
         JOIN users u ON u.id = p.user_id
         WHERE lower(u.username) = $1 AND p.disabled_at IS NULL
@@ -2444,6 +2469,12 @@ async def add_premium_rank(actor_id: UUID, name: str) -> dict[str, Any]:
                 raise ValueError("exists") from exc
             await _audit(conn, actor_id, "premium.rank.create", "premium_rank", str(rank_id), {"name": label, "slug": slug})
     return {"id": rank_id, "name": label, "slug": slug}
+
+
+async def has_active_premium(user_id: str) -> bool:
+    return bool(await _get_pool().fetchval(
+        "SELECT EXISTS(SELECT 1 FROM premium_entitlements WHERE user_id = $1 AND active = TRUE AND (expires_at IS NULL OR expires_at > NOW()))", UUID(str(user_id))
+    ))
 
 
 async def list_entitlements() -> list[dict[str, Any]]:

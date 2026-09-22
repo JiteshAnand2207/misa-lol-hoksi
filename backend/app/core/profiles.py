@@ -2,7 +2,6 @@ from typing import Any
 
 from app.core.profile_sanitize import apply_badge_ownership, sanitize_profile_config
 from app.db import data_api
-from app.features import sanitize as feature_sanitize
 from app.models import User
 
 
@@ -80,7 +79,6 @@ def default_public_profile(user: User) -> dict[str, Any]:
             "ogOverlayAvatar": True,
             "ogOverlayName": True,
             "ogOverlayAddress": True,
-            **(feature_sanitize.defaults()),
         },
         "assets": {
             "avatar": {"url": user.avatar_url},
@@ -156,6 +154,8 @@ async def resolve_public_profile(username: str) -> dict[str, Any] | None:
     if not str(identity.get("displayName") or "").strip():
         identity["displayName"] = user.display_name or user.username
     grants = await data_api.list_user_badge_grants(user.id)
+    from app.core.premium import has_premium, public_projection
+    config = public_projection(config, await has_premium(user.id))
     cleaned = apply_badge_ownership(sanitize_profile_config(config), stored, grants)
     from app.db import achievements
     cleaned["rank"] = await achievements.current_rank_for_user(user.id)
@@ -166,8 +166,4 @@ async def resolve_public_profile(username: str) -> dict[str, Any] | None:
     identity = cleaned.get("profile")
     if isinstance(identity, dict):
         identity["views"] = await data_api.get_profile_view_count(user.id)
-    from app.features.render import stripped_secret
-    settings = cleaned.get("settings")
-    if isinstance(settings, dict):
-        cleaned["settings"] = stripped_secret(settings)
     return cleaned

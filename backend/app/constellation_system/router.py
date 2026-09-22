@@ -173,6 +173,8 @@ def create_router(
             await data_api.list_user_badge_grants(user.id),
         )
         from app.db import achievements
+        from app.core.premium import has_premium, protect_write
+        cleaned = protect_write(cleaned, existing, await has_premium(user.id))
         cleaned["rank"] = await achievements.current_rank_for_user(user.id)
         return {"group": await run(repository.update_member_profile(group_id, user.id, cleaned))}
 

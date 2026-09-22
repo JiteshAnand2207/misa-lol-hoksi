@@ -8,7 +8,7 @@ import type { ProfileConfig } from "@/lib/types";
 
 type RepeatMode = "off" | "all" | "one";
 
-export function ProfileMusicPlayer({ config, preview = false, autoplay = false, compact = false }: { config: ProfileConfig; preview?: boolean; autoplay?: boolean; compact?: boolean }) {
+export function ProfileMusicPlayer({ config, preview = false, autoplay = false }: { config: ProfileConfig; preview?: boolean; autoplay?: boolean }) {
   const tracks = useMemo(() => playlistTracks(config.assets), [config.assets]);
   const trackKey = useMemo(() => tracks.map((item) => item.id).join("|"), [tracks]);
   const { requestedId, requestNonce, pauseNonce, notify } = usePreviewPlayer();
@@ -17,6 +17,7 @@ export function ProfileMusicPlayer({ config, preview = false, autoplay = false, 
   const srcRef = useRef("");
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [mediaError, setMediaError] = useState(false);
   const [muted] = useState(false);
   const [repeat] = useState<RepeatMode>("all");
   const [shuffle] = useState(false);
@@ -39,12 +40,9 @@ export function ProfileMusicPlayer({ config, preview = false, autoplay = false, 
     setIndex((current) => (tracks.length ? Math.min(current, tracks.length - 1) : 0));
   }, [trackKey, tracks.length]);
   useEffect(() => { setLevel(config.assets.volume); }, [config.assets.volume]);
-  useEffect(() => () => {
+  useEffect(() => {
     const audio = audioRef.current;
-    if (!audio) return;
-    audio.pause();
-    audio.removeAttribute("src");
-    audio.load();
+    return () => { if (audio) { audio.pause(); audio.removeAttribute("src"); audio.load(); srcRef.current = ""; } };
   }, []);
   useEffect(() => {
     const audio = audioRef.current;
@@ -64,13 +62,8 @@ export function ProfileMusicPlayer({ config, preview = false, autoplay = false, 
       setPlaying(false);
       return;
     }
-    if (srcRef.current === src) {
-      if (playingRef.current) {
-        audio.currentTime = 0;
-        void audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
-      }
-      return;
-    }
+    if (srcRef.current === src) return;
+    setMediaError(false);
     audio.pause();
     audio.currentTime = 0;
     srcRef.current = src;
@@ -175,18 +168,21 @@ export function ProfileMusicPlayer({ config, preview = false, autoplay = false, 
     >
       <audio
         ref={audioRef}
+        data-track-info={JSON.stringify({ id: track.id, title: trackTitle(track), artwork, src, recording: track.recording, count: tracks.length })}
         preload="none"
         onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
         onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
-        onPlay={() => setPlaying(true)}
+        onPlay={() => { setMediaError(false); setPlaying(true); }}
+        onError={() => { playingRef.current = false; setPlaying(false); setMediaError(true); }}
         onPause={() => setPlaying(false)}
         onEnded={ended}
       />
-      <div className={compact ? "flex min-w-0 items-center gap-3 sm:grid sm:grid-cols-[3rem_minmax(0,1fr)] sm:gap-x-2 sm:gap-y-1.5" : "flex min-w-0 items-center gap-3"}>
-        <div className={`flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl sm:h-14 sm:w-14 ${compact ? "sm:row-span-2 sm:h-12 sm:w-12" : ""} ${swap ? "" : "bg-white/[.06]"}`} style={swap ? { backgroundColor: `${ink}1a` } : undefined}>
+      {mediaError && <p role="status" className="mb-2 text-xs opacity-70">This audio could not be played. Try another track.</p>}
+      <div className="profile-player-layout flex min-w-0 flex-wrap items-center gap-3">
+        <div className={`flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl sm:h-14 sm:w-14  ${swap ? "" : "bg-white/[.06]"}`} style={swap ? { backgroundColor: `${ink}1a` } : undefined}>
           {artwork ? <img src={artwork} alt="" className="h-full w-full object-cover" /> : <Volume2 size={18} className={swap ? "" : "text-white/40"} style={swap ? { color: ink } : undefined} />}
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-[1_1_100px]">
           <p className={`truncate text-sm font-medium ${swap ? "" : "text-white"}`}>{trackTitle(track)}</p>
           <div className="mt-2 flex min-w-0 items-center gap-2">
             <span className={`shrink-0 font-mono text-[10px] ${swap ? "" : "text-white/40"}`} style={swap ? { opacity: 0.6 } : undefined}>{formatTime(currentTime)}</span>
@@ -207,19 +203,20 @@ export function ProfileMusicPlayer({ config, preview = false, autoplay = false, 
             <span className={`shrink-0 font-mono text-[10px] ${swap ? "" : "text-white/40"}`} style={swap ? { opacity: 0.6 } : undefined}>{formatTime(duration)}</span>
           </div>
         </div>
-        <div className={`flex shrink-0 items-center gap-0.5 ${compact ? "sm:col-start-2 sm:justify-end" : ""}`}>
-          <button type="button" onClick={() => step(-1)} className={`grid h-8 w-7 place-items-center rounded-lg transition ${swap ? "" : "text-white/45 hover:bg-white/[.08] hover:text-white"}`} style={swap ? { color: ink } : undefined} aria-label="Previous track"><SkipBack size={15} fill="currentColor" /></button>
+        <div className={`flex shrink-0 items-center gap-0.5 `}>
+          <button type="button" data-player-prev disabled={tracks.length < 2} onClick={() => step(-1)} className={`grid h-8 w-7 place-items-center rounded-lg transition ${swap ? "" : "text-white/45 hover:bg-white/[.08] hover:text-white"}`} style={swap ? { color: ink } : undefined} aria-label="Previous track"><SkipBack size={15} fill="currentColor" /></button>
           <button type="button" onClick={toggle} className={`grid h-9 w-8 place-items-center rounded-lg transition ${swap ? "" : "text-white/80 hover:bg-white/[.08] hover:text-white"}`} style={swap ? { color: ink } : undefined} aria-label={playing ? "Pause" : "Play"}>
             {playing ? <Pause size={20} fill="currentColor" /> : <Play size={19} fill="currentColor" />}
           </button>
-          <button type="button" onClick={() => step(1)} className={`grid h-8 w-7 place-items-center rounded-lg transition ${swap ? "" : "text-white/45 hover:bg-white/[.08] hover:text-white"}`} style={swap ? { color: ink } : undefined} aria-label="Next track"><SkipForward size={15} fill="currentColor" /></button>
+          <button type="button" data-player-next disabled={tracks.length < 2} onClick={() => step(1)} className={`grid h-8 w-7 place-items-center rounded-lg transition ${swap ? "" : "text-white/45 hover:bg-white/[.08] hover:text-white"}`} style={swap ? { color: ink } : undefined} aria-label="Next track"><SkipForward size={15} fill="currentColor" /></button>
         </div>
       </div>
     </div>
   );
 }
 export function ProfileVideoAudioControl({ config }: { config: ProfileConfig }) {
-  const videoEl = () => document.querySelector<HTMLVideoElement>("[data-bg-video]");
+  const scopeRef = useRef<HTMLDivElement>(null);
+  const videoEl = () => scopeRef.current?.closest("[data-profile-layout]")?.querySelector<HTMLVideoElement>("[data-bg-video]") ?? null;
   const [muted, setMuted] = useState(true);
   const [level, setLevel] = useState(config.assets.volume);
 
@@ -260,6 +257,7 @@ export function ProfileVideoAudioControl({ config }: { config: ProfileConfig }) 
 
   return (
     <div
+      ref={scopeRef}
       className={`relative z-20 mt-6 rounded-2xl border p-3 text-left ${swap ? "" : "border-white/[.1] bg-black/25"}`}
       style={swap ? { backgroundColor: accent, color: ink, borderColor: `${ink}33` } : undefined}
       onClick={(event) => event.stopPropagation()}
@@ -269,7 +267,7 @@ export function ProfileVideoAudioControl({ config }: { config: ProfileConfig }) 
         <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${swap ? "" : "bg-white/[.06]"}`} style={swap ? { backgroundColor: `${ink}1a` } : undefined}>
           {muted || level === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-[1_1_100px]">
           <p className={`truncate text-sm font-medium ${swap ? "" : "text-white"}`}>Background video</p>
           <p className={`mt-0.5 text-[11px] ${swap ? "" : "text-white/40"}`} style={swap ? { opacity: 0.66 } : undefined}>
             {muted ? "Audio off" : "Using video audio"}

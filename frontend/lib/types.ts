@@ -10,7 +10,7 @@ export type BackgroundEffect = "None" | "Snowflakes" | "Snow" | "Sakura" | "Rain
 export type UsernameEffect = "None" | "Glow" | "Gradient" | "Shimmer" | "Rainbow" | "Fuzzy" | "Shuffle" | "Sparkle" | "Glitch" | "Pulse" | "Wave" | "Shadow";
 export type SocialAlign = "left" | "center" | "right";
 export type SocialAction = "open" | "copy";
-export type ProfileLayout = "Modern" | "Simplistic" | "Sleek";
+export type ProfileLayout = "Default" | "Modern" | "Simplistic" | "Sleek" | "Portfolio";
 export type ProfileShape = "circle" | "rounded" | "square";
 export type BannerShape = "rounded" | "square" | "pill";
 export type ButtonStyle = "glass" | "solid" | "outline";
@@ -25,7 +25,10 @@ export interface ProfileAsset {
   remove?: boolean;
 }
 
+export interface LyricsRecording { id: number; title: string; artist: string; album: string; duration: number }
+
 export interface AudioTrack {
+  recording?: LyricsRecording | null;
   id: string;
   title: string;
   audio: ProfileAsset;
@@ -48,7 +51,7 @@ export interface SocialLink {
 
 export type WidgetType = "youtube" | "spotify" | "discord" | "telegram" | "roblox" | "github" | "lastfm" | "timezone" | "weather";
 
-export type SectionType = "about" | "project" | "skills" | "text" | "lyrics";
+export type SectionType = "about" | "project" | "skills" | "text" | "lyrics" | "integration";
 
 export interface ProfileSection {
   id: string;
@@ -59,6 +62,9 @@ export interface ProfileSection {
   href?: string;
   tags?: string[];
   cover?: ProfileAsset | null;
+  subtitle?: string;
+  leftCard?: import("./premium").IntegrationCard;
+  rightCard?: import("./premium").IntegrationCard;
 }
 
 export interface ProfileWidget {
@@ -105,6 +111,7 @@ export interface ProfileConfig {
     joinedAt?: string;
   };
   settings: {
+    premium?: import("./premium").PremiumSettings;
     accentColor: string;
     usernameColor?: string;
     usernameEffectColor?: string;
@@ -129,6 +136,7 @@ export interface ProfileConfig {
     showAvatar?: boolean;
     showAvatarBorder?: boolean;
     showDisplayName?: boolean;
+    elementLayouts?: import("./element-layout").ElementLayouts;
     profileFrameScale?: number;
     profileFrameWidth?: number;
     profileFrameHeight?: number;
@@ -166,11 +174,6 @@ export interface ProfileConfig {
     ogOverlayAvatar?: boolean;
     ogOverlayName?: boolean;
     ogOverlayAddress?: boolean;
-    asks?: boolean;
-    guestbook?: boolean;
-    doodles?: boolean;
-    tally?: { q?: string; options?: string[] };
-    secret?: { hasSecret?: boolean; wordHash?: string; url?: string | null; label?: string };
   };
   assets: {
     avatar: ProfileAsset;
@@ -187,6 +190,7 @@ export interface ProfileConfig {
     favicon?: ProfileAsset;
     customFont?: ProfileAsset;
     clickSound?: ProfileAsset;
+    entryIcon?: ProfileAsset;
     audioEnabled: boolean;
     audioSource?: "video" | "standalone" | "tracks";
     volume: number;

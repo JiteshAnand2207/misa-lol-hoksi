@@ -2,7 +2,8 @@
 
 import type { LucideIcon } from "lucide-react";
 import { Check, ChevronDown, LoaderCircle, RotateCcw } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export const buttonStyles = {
   primary: "bg-white/[.92] text-black hover:bg-white shadow-[0_8px_30px_rgba(255,255,255,.08)]",
@@ -46,8 +47,19 @@ export function SectionTitle({ icon: Icon, title, description, action }: { icon?
 }
 
 export function Modal({ open, title, description, onClose, children, size = "md" }: { open: boolean; title: string; description?: string; onClose: () => void; children: React.ReactNode; size?: "md" | "lg" }) {
-  if (!open) return null;
-  return <div className="fixed inset-0 z-[100] flex items-center justify-center p-4"><button type="button" onClick={onClose} aria-label="Close modal" className="animate-fade-in absolute inset-0 cursor-default bg-black/70 backdrop-blur-sm" /><div className={`glass-floating animate-modal-in relative z-10 max-h-[85vh] w-full overflow-y-auto rounded-[18px] p-6 ${size === "lg" ? "max-w-lg" : "max-w-md"}`}><div className="mb-6 flex items-start justify-between"><div><h2 className="text-lg font-semibold">{title}</h2>{description && <p className="mt-1 text-sm text-zinc-500">{description}</p>}</div><button type="button" onClick={onClose} className="rounded-lg px-2 py-1 text-2xl leading-none text-zinc-500 hover:bg-white/[.06] hover:text-white" aria-label="Close">×</button></div>{children}</div></div>;
+  const dialog = useRef<HTMLDialogElement>(null);
+  const label = useId();
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    const node = dialog.current;
+    if (!open || !node) return;
+    const previous = document.activeElement as HTMLElement | null;
+    node.showModal();
+    return () => { node.close(); previous?.focus(); };
+  }, [open]);
+  if (!open || typeof document === "undefined") return null;
+  return createPortal(<dialog ref={dialog} aria-labelledby={label} onCancel={event => { event.preventDefault(); closeRef.current(); }} onClick={event => { if (event.target === event.currentTarget) closeRef.current(); }} className={`glass-floating animate-modal-in fixed max-h-[85dvh] w-[calc(100%-32px)] overflow-y-auto rounded-[18px] border border-white/10 p-5 text-white shadow-2xl backdrop:bg-black/70 backdrop:backdrop-blur-sm sm:p-6 ${size === "lg" ? "max-w-lg" : "max-w-md"}`}><div className="mb-6 flex items-start justify-between gap-3"><div><h2 id={label} className="text-lg font-semibold">{title}</h2>{description && <p className="mt-1 text-sm text-zinc-500">{description}</p>}</div><button type="button" onClick={onClose} className="sidebar-close flex" aria-label="Close">×</button></div>{children}</dialog>, document.body);
 }
 
 export function MiniBar({ value, color = "#e11d48" }: { value: number; color?: string }) { return <div className="h-1.5 overflow-hidden rounded-full bg-white/[.07]"><div className="h-full rounded-full transition-all" style={{ width: `${value}%`, background: color }} /></div>; }

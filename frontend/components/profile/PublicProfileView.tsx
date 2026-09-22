@@ -1,13 +1,14 @@
 ﻿"use client";
 
 import { useEffect, useState } from "react";
-import { loadProfileForUsername } from "@/lib/profile-store";
+import { loadProfileForUsername, normalizeDashboardProfile } from "@/lib/profile-store";
 import type { ProfileConfig } from "@/lib/types";
+import { ProfilePageMetadata } from "./ProfilePageMetadata";
 import { ProfileRenderer } from "./ProfileRenderer";
 
-export function PublicProfileView({ username }: { username: string }) {
-  const [config, setConfig] = useState<ProfileConfig | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "missing">("loading");
+export function PublicProfileView({ username, initialProfile }: { username: string; initialProfile?: ProfileConfig | null }) {
+  const [config, setConfig] = useState<ProfileConfig | null>(() => initialProfile ? normalizeDashboardProfile(initialProfile) : null);
+  const [status, setStatus] = useState<"loading" | "ready" | "missing">(initialProfile ? "ready" : initialProfile === null ? "missing" : "loading");
 
   useEffect(() => {
     document.documentElement.classList.add("live-card");
@@ -15,6 +16,11 @@ export function PublicProfileView({ username }: { username: string }) {
   }, []);
 
   useEffect(() => {
+    if (initialProfile !== undefined) {
+      setConfig(initialProfile ? normalizeDashboardProfile(initialProfile) : null);
+      setStatus(initialProfile ? "ready" : "missing");
+      return;
+    }
     let cancelled = false;
     void loadProfileForUsername(username).then((profile) => {
       if (cancelled) return;
@@ -27,7 +33,7 @@ export function PublicProfileView({ username }: { username: string }) {
       setStatus("ready");
     });
     return () => { cancelled = true; };
-  }, [username]);
+  }, [username, initialProfile]);
 
 
   if (status === "loading") return <div className="min-h-[100svh] bg-[#07070a]" />;
@@ -42,5 +48,5 @@ export function PublicProfileView({ username }: { username: string }) {
       </main>
     );
   }
-  return <ProfileRenderer config={config} />;
+  return <><ProfilePageMetadata config={config} /><ProfileRenderer config={config} /></>;
 }

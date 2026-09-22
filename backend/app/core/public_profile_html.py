@@ -1,3 +1,5 @@
+from app.core.element_layout import element_style
+
 import hashlib
 import json
 from html import escape
@@ -9,92 +11,10 @@ from app.core.og_card import share_copy
 from app.core.public_origin import public_origin_for
 from app.core.markdown import render_safe_markdown
 from app.core.profile_sanitize import PAGE_ENTERS, PROFILE_FONTS, USERNAME_EFFECTS, css_hex_color, has_public_asset, is_safe_social_icon, public_playlist, public_social_href, sanitize_profile_config
-from app.core.sections import parse_lyrics, section_has_content
+from app.core.sections import visible_sections, project_configured
 from app.core.widgets import safe_widget_url
 from app.core.social_icons import social_icon_markup
 from app.core.social_prefixes import DEFAULT_ICON_COLOR, resolve_icon_color
-from app.features.render import feature_blocks_html
-
-PUBLIC_FEATURE_CSS = """
-.feature-block h2{font-size:13px;margin:0 0 8px;letter-spacing:.04em;color:#ffffff99;text-transform:uppercase}
-.feature-text{margin:0;color:#ffffffcc;font-size:13px;line-height:1.55}
-.feature-text.presence-now{font-variant-numeric:tabular-nums}
-.neighbour-chip{display:inline-block}
-.section-flip .feature-text{color:#ffffffb3}
-"""
-
-PUBLIC_ASK_MAX_QUESTION = 400
-PUBLIC_ASK_MAX_AUTHOR = 48
-
-PUBLIC_ASK_CSS = """
-.askbox{max-width:560px;margin:18px auto 0;text-align:left}
-.askbox h2{font-size:15px;margin:0 0 10px;letter-spacing:.02em}
-.ask-form{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
-.ask-form textarea,.ask-form input{width:100%;box-sizing:border-box;background:#ffffff0d;border:1px solid #ffffff26;border-radius:10px;color:inherit;font:inherit;padding:10px 12px;outline:none}
-.ask-form textarea{resize:vertical;min-height:56px}
-.ask-form textarea:focus,.ask-form input:focus{border-color:#9b87f588}
-.ask-form-row{display:flex;gap:8px}
-.ask-form-row input{flex:1}
-.ask-form button{border:0;border-radius:10px;background:#9b87f5;color:#fff;font:inherit;font-weight:600;padding:10px 18px;cursor:pointer}
-.ask-form button:hover{background:#8d7df0}
-.ask-notice{color:#9b87f5;font-size:13px;margin:0 0 10px}
-.ask-list{display:flex;flex-direction:column;gap:10px}
-.ask-item{background:#ffffff0d;border:1px solid #ffffff1a;border-radius:12px;padding:12px 14px}
-.ask-q{margin:0 0 6px;font-size:14px;line-height:1.45}
-.ask-answer{margin:0;color:#ffffffb3;font-size:13px;line-height:1.5;white-space:normal}
-.ask-empty{margin:0;color:#ffffff80;font-size:12px}
-"""
-
-PUBLIC_GUESTBOOK_CSS = """
-.guestbook{max-width:560px;margin:18px auto 0;text-align:left}
-.guestbook h2{font-size:15px;margin:0 0 10px;letter-spacing:.02em}
-.book-rows{display:flex;flex-direction:column;gap:10px}
-.book-row{background:#ffffff0d;border:1px solid #ffffff1a;border-radius:12px;padding:12px 14px}
-.book-row p{margin:0 0 6px;font-size:13px;line-height:1.5}
-.book-row span{display:block;color:#ffffff80;font-size:11px}
-.book-empty{margin:0;color:#ffffff80;font-size:12px}
-.book-form{display:flex;flex-direction:column;gap:8px;margin:12px 0 0;border-top:1px solid #ffffff1a;padding-top:12px}
-.book-form textarea,.book-form input{width:100%;box-sizing:border-box;background:#ffffff0d;border:1px solid #ffffff26;border-radius:10px;color:inherit;font:inherit;padding:10px 12px;outline:none}
-.book-form textarea{resize:vertical;min-height:56px}
-.book-form textarea:focus,.book-form input:focus{border-color:#9b87f588}
-.book-form-row{display:flex;gap:8px}
-.book-form-row input{flex:1}
-.book-form button{border:0;border-radius:10px;background:#9b87f5;color:#fff;font:inherit;font-weight:600;padding:10px 18px;cursor:pointer;align-self:flex-start}
-.book-form button:hover{background:#8d7df0}
-.book-notice{color:#9b87f5;font-size:13px;margin:0 0 10px}
-"""
-
-PUBLIC_TALLY_CSS = """
-.tallybox{max-width:560px;margin:18px auto 0;text-align:left}
-.tallybox h2{font-size:15px;margin:0 0 6px;letter-spacing:.02em}
-.tally-q{font-size:13px;color:#ffffffb3;margin:0 0 12px;line-height:1.5}
-.tally-list{display:flex;flex-direction:column;gap:8px}
-.tally-row{background:#ffffff0d;border:1px solid #ffffff1a;border-radius:12px;overflow:hidden}
-.tally-label{display:flex;align-items:center;gap:10px;padding:10px 14px;font-size:13px;cursor:pointer}
-.tally-label input{accent-color:#9b87f5}
-.tally-bar{height:4px;background:#ffffff14}
-.tally-bar span{display:block;height:100%;background:#9b87f5}
-.tally-meta{margin:10px 0 0;color:#ffffff80;font-size:11px}
-.tally-sent{color:#9b87f5;font-size:13px;margin:0 0 10px}
-.tally-btn{border:0;border-radius:10px;background:#9b87f5;color:#fff;font:inherit;font-weight:600;padding:10px 18px;cursor:pointer;margin-top:10px}
-.tally-btn:hover{background:#8d7df0}
-"""
-
-PUBLIC_DOODLE_CSS = """
-.doodlebox{max-width:560px;margin:18px auto 0;text-align:left}
-.doodlebox h2{font-size:15px;margin:0 0 10px;letter-spacing:.02em}
-.doodle-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin:0 0 12px}
-.doodle-grid img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;background:#ffffff0d;border:1px solid #ffffff1a}
-.doodle-empty{color:#ffffff80;font-size:12px;margin:0 0 12px}
-.doodle-draw{display:flex;flex-direction:column;gap:8px;border-top:1px solid #ffffff1a;padding-top:12px}
-.doodle-canvas{width:100%;max-width:320px;aspect-ratio:8/5;height:auto;background:#000;border:1px solid #ffffff26;border-radius:10px;touch-action:none;cursor:crosshair}
-.doodle-actions{display:flex;gap:8px}
-.doodle-actions button{border:0;border-radius:10px;font:inherit;font-weight:600;padding:8px 14px;cursor:pointer}
-.doodle-post{background:#9b87f5;color:#fff}
-.doodle-post:hover{background:#8d7df0}
-.doodle-clear{background:#ffffff14;color:#fff}
-.doodle-note{margin:0;color:#ffffff80;font-size:11px;min-height:15px}
-"""
 
 def _color_with_alpha(value: str, alpha: float) -> str:
     raw = (value or "#ffffff").lstrip("#")
@@ -137,39 +57,6 @@ PUBLIC_ANALYTICS_SCRIPT = """<script>
     if (!target) return;
     send("click", target.getAttribute("data-social-id") || "", target.getAttribute("data-social-platform") || "");
   });
-})();
-</script>
-"""
-
-PUBLIC_RESPONSIVE_FRAME_SCRIPT = """<script>
-(() => {
-  const stage = document.querySelector(".card-stage");
-  if (!stage) return;
-  const mobile = window.matchMedia("(max-width: 639px)");
-  let queued = 0;
-  const fit = () => {
-    cancelAnimationFrame(queued);
-    queued = requestAnimationFrame(() => {
-      if (!mobile.matches) {
-        stage.style.removeProperty("--mobile-frame-scale");
-        return;
-      }
-      const viewport = window.visualViewport;
-      const width = Math.max(1, viewport?.width || window.innerWidth);
-      const height = Math.max(1, viewport?.height || window.innerHeight);
-      const stageWidth = Math.max(1, stage.offsetWidth);
-      const stageHeight = Math.max(1, stage.offsetHeight);
-      const wanted = Math.max(0.1, Number(stage.dataset.frameScale || "1"));
-      const scale = Math.max(0.1, Math.min(wanted, (width - 24) / stageWidth, (height - 24) / stageHeight));
-      stage.style.setProperty("--mobile-frame-scale", String(scale));
-    });
-  };
-  new ResizeObserver(fit).observe(stage);
-  mobile.addEventListener("change", fit);
-  window.addEventListener("resize", fit, { passive: true });
-  window.visualViewport?.addEventListener("resize", fit, { passive: true });
-  document.fonts?.ready.then(fit).catch(() => {});
-  fit();
 })();
 </script>
 """
@@ -232,6 +119,7 @@ PUBLIC_COPY_SCRIPT = """<div id="copy-toast" hidden>Copied</div>
   const paint = (i) => {
     const track = tracks[i];
     if (!track) return;
+    if (audio) audio.dataset.trackInfo = JSON.stringify({ ...track, src: track.audio, count: tracks.length });
     if (titleEl) titleEl.textContent = track.title || "Track";
     if (countEl) countEl.textContent = (i + 1) + " / " + tracks.length;
     if (artEl && track.artwork && artEl.getAttribute("src") !== track.artwork) artEl.src = track.artwork;
@@ -257,6 +145,18 @@ PUBLIC_COPY_SCRIPT = """<div id="copy-toast" hidden>Copied</div>
     load(order[(pos + dir + order.length) % order.length], true);
   };
   if (audio) audio.volume = volume;
+  const videoToggle = document.getElementById("video-audio-toggle");
+  const videoVolume = document.getElementById("video-volume");
+  if (video) {
+    video.volume = volume;
+    const syncVideo = () => {
+      if (videoToggle) { videoToggle.textContent = video.muted ? "Enable audio" : "Mute audio"; videoToggle.setAttribute("aria-pressed", String(!video.muted)); }
+    };
+    video.addEventListener("volumechange", syncVideo);
+    videoToggle?.addEventListener("click", () => { video.muted = !video.muted; video.play().catch(() => {}); });
+    videoVolume?.addEventListener("input", () => { video.volume = Number(videoVolume.value) / 100; });
+    syncVideo();
+  }
   const startMedia = () => {
     if (video) video.play().catch(() => {});
     if (audio && enabled && tracks[0]) load(0, true);
@@ -394,42 +294,51 @@ PUBLIC_COPY_SCRIPT = """<div id="copy-toast" hidden>Copied</div>
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const pageEnter = document.body.dataset.pageEnter || "Fade";
   const playClick = () => {
-    if (document.body.dataset.clickSound !== "1") return;
-    const src = document.body.dataset.clickSrc || "";
+    if (document.body.dataset.clickSound !== "1" || document.body.dataset.clickPreset === "None") return;
+    const preset = document.body.dataset.clickPreset || "Crisp Click";
+    const src = (!document.body.dataset.clickPreset || preset === "Custom") ? document.body.dataset.clickSrc || "" : "";
     if (src) {
       const tap = new Audio(src);
       tap.volume = 0.35;
       tap.play().catch(() => {});
       return;
     }
+    if (preset === "Custom") return;
     const Ctx = window.AudioContext || window.webkitAudioContext;
     if (!Ctx) return;
     const ctx = new Ctx();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.value = 880;
+    osc.type = preset === "Pixel Click" ? "square" : preset === "Mouse Click" ? "triangle" : "sine";
+    osc.frequency.value = preset === "Bass Tick" ? 140 : preset === "Pixel Click" ? 1200 : preset === "Mouse Click" ? 1800 : 880;
     gain.gain.value = 0.05;
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.start();
     gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.08);
     osc.stop(ctx.currentTime + 0.09);
+    osc.onended = () => { osc.disconnect(); gain.disconnect(); ctx.close(); };
   };
   const reveal = () => {
     if (!card) return;
     card.hidden = false;
     if (mediaDock) mediaDock.hidden = false;
     if (profileMeta) profileMeta.hidden = false;
-    if (!reduced && pageEnter !== "None") card.classList.add("enter-" + pageEnter.toLowerCase());
+    if (document.body.dataset.profileKind !== "Portfolio" && !reduced && pageEnter !== "None") card.classList.add("enter-" + pageEnter.toLowerCase());
     startMedia();
   };
   if (entry && card) {
     card.hidden = true;
     if (mediaDock) mediaDock.hidden = true;
     if (profileMeta) profileMeta.hidden = true;
-    entry.addEventListener("click", () => {
-      entry.hidden = true;
+    let entryUsed = false;
+    entry.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (entryUsed) return;
+      entryUsed = true;
+      entry.classList.add("is-leaving");
+      window.setTimeout(() => { entry.hidden = true; }, reduced ? 0 : 500);
+      if (video && videoToggle && enabled) video.muted = false;
       reveal();
     });
   } else {
@@ -439,14 +348,15 @@ PUBLIC_COPY_SCRIPT = """<div id="copy-toast" hidden>Copied</div>
     const hit = event.target.closest(".social, #entry, [data-copy], .audio-btn");
     if (hit) playClick();
   });
-  if (card && document.body.dataset.tilt === "1" && !reduced) {
-    card.addEventListener("pointermove", (event) => {
-      const box = card.getBoundingClientRect();
+  const tiltCard = document.body.dataset.profileKind === "Portfolio" ? document.querySelector(".portfolio-identity") : card;
+  if (tiltCard && document.body.dataset.tilt === "1" && !reduced) {
+    tiltCard.addEventListener("pointermove", (event) => {
+      const box = tiltCard.getBoundingClientRect();
       const x = (event.clientX - box.left) / box.width - 0.5;
       const y = (event.clientY - box.top) / box.height - 0.5;
-      card.style.transform = "rotateX(" + (-y * 7).toFixed(2) + "deg) rotateY(" + (x * 9).toFixed(2) + "deg)";
+      tiltCard.style.transform = "rotateX(" + (-y * 7).toFixed(2) + "deg) rotateY(" + (x * 9).toFixed(2) + "deg)";
     });
-    card.addEventListener("pointerleave", () => { card.style.transform = ""; });
+    tiltCard.addEventListener("pointerleave", () => { tiltCard.style.transform = ""; });
   }
   const nameEl = document.getElementById("display-name");
   const nameEffect = document.body.dataset.nameEffect || "";
@@ -465,7 +375,7 @@ PUBLIC_COPY_SCRIPT = """<div id="copy-toast" hidden>Copied</div>
   }
   const bioEl = document.getElementById("profile-bio");
   const bioNode = document.getElementById("bio-lines");
-  if (bioEl && bioNode) {
+  if (bioEl && bioNode && !reduced) {
     let lines = [];
     try { lines = JSON.parse(bioNode.textContent || "[]"); } catch (error) { lines = []; }
     if (lines.length) {
@@ -515,6 +425,27 @@ PUBLIC_COPY_SCRIPT = """<div id="copy-toast" hidden>Copied</div>
 })();
 </script>"""
 
+
+PUBLIC_MEDIA_LAYOUT_SCRIPT = """<script>
+(() => {
+  const slot = document.querySelector(".profile-audio-slot");
+  if (!slot) return;
+  const mobile = document.querySelector("[data-profile-mobile-audio]");
+  const row = document.querySelector("[data-profile-media-row]");
+  const viewport = window.matchMedia("(min-width:900px)");
+  const place = () => {
+    const target = viewport.matches ? row : mobile;
+    if (!target || slot.parentElement === target) return;
+    const audio = slot.querySelector("audio");
+    const playing = audio && !audio.paused;
+    if (target.moveBefore && slot.isConnected) target.moveBefore(slot, null);
+    else target.appendChild(slot);
+    if (playing && audio.paused) audio.play().catch(() => {});
+  };
+  place();
+  viewport.addEventListener("change", place);
+})();
+</script>"""
 
 PUBLIC_WIDGET_SCRIPT = """<script>
 (() => {
@@ -596,41 +527,26 @@ AUDIO_ICON_REPEAT = _audio_icon('<path d="m17 2 4 4-4 4"/><path d="M3 11V9a3 3 0
 AUDIO_ICON_VOLUME = _audio_icon('<path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>', "audio-icon-volume")
 AUDIO_ICON_VOLUME_X = _audio_icon('<path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/>', "audio-icon-volume-x")
 
-PUBLIC_LYRICS_SCRIPT = """<script>
-(() => {
-  const boxes = document.querySelectorAll("[data-lyrics]");
-  const audio = document.getElementById("profile-audio");
-  if (!boxes.length) return;
-  const paint = (time) => {
-    boxes.forEach((box) => {
-      const lines = [...box.querySelectorAll("[data-t]")];
-      if (!lines.length) return;
-      let active = -1;
-      lines.forEach((line, index) => {
-        const at = Number(line.getAttribute("data-t"));
-        line.classList.toggle("is-active", false);
-        if (Number.isFinite(at) && time >= at) active = index;
-      });
-      if (active < 0) return;
-      lines[active].classList.add("is-active");
-      const root = box.querySelector(".lyrics");
-      const line = lines[active];
-      if (root && line) root.scrollTop = Math.max(0, line.offsetTop - root.clientHeight / 2);
-    });
-  };
-  if (audio) audio.addEventListener("timeupdate", () => paint(audio.currentTime));
-})();
+PUBLIC_EMPTY_SCRIPT = """<script type="module">
+import { mountEmpty } from '/dashboard/profile-empty.mjs';
+const emptyCleanup = [...document.querySelectorAll('[data-empty-face]')].map(mountEmpty);
+addEventListener('pagehide', () => emptyCleanup.forEach(cleanup => cleanup()), { once: true });
+</script>"""
+
+PUBLIC_LYRICS_SCRIPT = """<script type="module">
+import { mountLyrics } from '/dashboard/profile-lyrics.mjs';
+document.querySelectorAll('[data-lyrics-body]').forEach(host => mountLyrics(host, document.body));
 </script>"""
 
 
 PUBLIC_BACKGROUND_EFFECT_SCRIPT = """<script>
-(()=>{const c=document.getElementById("bg-particles");if(!c)return;const e=c.dataset.effect||"None",x=c.getContext("2d"),reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;let w=1,h=1,t=0,raf=0,wind=0,p=[];
+(()=>{const c=document.getElementById("bg-particles");if(!c)return;const e=c.dataset.effect||"None",rgb=c.dataset.color||(e==="Fireflies"?"252,210,113":"255,255,255"),x=c.getContext("2d"),reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;let w=1,h=1,t=0,raf=0,wind=0,p=[];
 if(e==="Rain"){c.style.backdropFilter="blur(1.4px) saturate(.88) brightness(.93)";c.style.background="rgba(130,175,198,.035)"}
 const make=(random=true)=>({x:Math.random()*w,y:random?Math.random()*h:-30,s:e==="Rain"?2.5+Math.pow(Math.random(),3.1)*18:e==="Fireflies"?.45+Math.pow(Math.random(),2.2)*1.35:e==="Sakura"?10+Math.random()*4:e==="Snow"?.8+Math.random()*2.4:1.4+Math.random()*(e==="Snowflakes"?4:2.6),v:e==="Rain"?.025+Math.random()*.22:e==="Snow"?.2+Math.random()*1.8:.25+Math.random()*1.1,d:(Math.random()-.5)*(e==="Fireflies"?.7:e==="Sakura"?.9:e==="Snow"?2.2:.35),q:Math.random()*Math.PI*2,a:.35+Math.random()*.55});
 const resize=()=>{const r=c.getBoundingClientRect(),d=Math.min(devicePixelRatio||1,e==="Rain"?1.5:1.75);w=Math.max(1,r.width);h=Math.max(1,r.height);c.width=Math.round(w*d);c.height=Math.round(h*d);x.setTransform(d,0,0,d,0,0);const n=e==="Fireflies"?Math.max(60,Math.min(200,Math.round(w*h/6000))):e==="Sakura"?Math.max(10,Math.min(28,Math.round(w/80))):e==="Snow"?Math.max(24,Math.min(64,Math.round(w*h/14500))):Math.max(12,Math.min(e==="Rain"?140:48,Math.round(e==="Rain"?w*h/5200:w/28)));p=Array.from({length:reduce?Math.min(22,n):n},()=>make())};
-const flake=o=>{x.save();x.translate(o.x,o.y);x.strokeStyle="rgba(255,255,255,"+o.a+")";x.lineWidth=Math.max(.7,o.s/5);for(let i=0;i<3;i++){x.rotate(Math.PI/3);x.beginPath();x.moveTo(-o.s,0);x.lineTo(o.s,0);x.stroke()}x.restore()};
+const flake=o=>{x.save();x.translate(o.x,o.y);x.strokeStyle="rgba("+rgb+","+o.a+")";x.lineWidth=Math.max(.7,o.s/5);for(let i=0;i<3;i++){x.rotate(Math.PI/3);x.beginPath();x.moveTo(-o.s,0);x.lineTo(o.s,0);x.stroke()}x.restore()};
 const rain=o=>{const r=o.s,z=1+Math.max(0,r-7)*.035;if(r>8){const l=x.createLinearGradient(o.x,o.y-r*3.2,o.x,o.y);l.addColorStop(0,"rgba(210,235,246,0)");l.addColorStop(1,"rgba(210,235,246,"+o.a*.16+")");x.strokeStyle=l;x.lineWidth=Math.max(1,r*.18);x.beginPath();x.moveTo(o.x,o.y-r*3.2);x.lineTo(o.x,o.y-r*.7);x.stroke()}const g=x.createRadialGradient(o.x-r*.32,o.y-r*.4,r*.08,o.x,o.y,r*1.15);g.addColorStop(0,"rgba(255,255,255,.68)");g.addColorStop(.2,"rgba(210,235,246,.13)");g.addColorStop(.68,"rgba(120,155,176,.08)");g.addColorStop(1,"rgba(5,18,28,.48)");x.shadowColor="rgba(0,10,20,.62)";x.shadowBlur=Math.max(2,r*.45);x.shadowOffsetY=Math.max(1,r*.12);x.fillStyle=g;x.beginPath();x.ellipse(o.x,o.y,r*.72,r*z,0,0,Math.PI*2);x.fill();x.shadowColor="transparent";x.strokeStyle="rgba(235,249,255,"+Math.min(.7,o.a*.75)+")";x.lineWidth=Math.max(.45,r*.055);x.stroke();x.strokeStyle="rgba(255,255,255,"+o.a*.5+")";x.lineWidth=Math.max(.5,r*.08);x.beginPath();x.arc(o.x-r*.08,o.y-r*.13,r*.48,Math.PI*1.05,Math.PI*1.68);x.stroke()};
-const draw=(move=true)=>{x.clearRect(0,0,w,h);t+=move?1:0;for(const o of p){if(move){if(e==="Fireflies"){o.x+=(o.q>Math.PI?-1:1)*(.12+o.v*.12);o.y+=Math.sin(t/95+o.q)*.06}else if(e==="Rain"){o.y+=o.v*Math.max(1,o.s/5);o.x+=Math.sin(t/130+o.q)*.018}else if(e==="Snow"){o.y+=o.v;o.x+=o.d+wind}else{o.y+=o.v;o.x+=o.d+Math.sin(t/70+o.q)*.16}if(e==="Fireflies"){if(o.x>w+30){o.x=-30;o.y=Math.random()*h}else if(o.x< -30){o.x=w+30;o.y=Math.random()*h}}else if(o.y>h+30||o.x< -30||o.x>w+30)Object.assign(o,make(false))}x.save();x.globalAlpha=e==="Fireflies"?o.a*Math.pow(Math.max(0,Math.sin(t/(72+o.q*8)+o.q)),5):o.a;if(e==="Rain")rain(o);else if(e==="Sakura"){const pw=o.s*.78,ph=o.s;x.globalAlpha*=.9-Math.min(.7,o.y/Math.max(1,h)*.7);x.translate(o.x,o.y);x.rotate(Math.sin(t/34+o.q)*.48+o.q);if(Math.sin(t/42+o.q)<0)x.scale(-1,1);const g=x.createLinearGradient(-pw/2,-ph/2,pw/2,ph/2);g.addColorStop(0,"rgba(255,183,197,.92)");g.addColorStop(1,"rgba(255,197,208,.9)");x.fillStyle=g;x.beginPath();x.moveTo(-pw*.52,0);x.bezierCurveTo(-pw*.35,-ph*.48,pw*.32,-ph*.55,pw*.52,0);x.bezierCurveTo(pw*.3,ph*.42,-pw*.25,ph*.55,-pw*.52,0);x.closePath();x.fill()}else if(e==="Snowflakes")flake(o);else if(e==="Fireflies"){const g=x.createRadialGradient(o.x,o.y,0,o.x,o.y,o.s*3.2);g.addColorStop(0,"rgba(252,210,113,1)");g.addColorStop(.24,"rgba(252,210,113,.7)");g.addColorStop(1,"rgba(252,210,113,0)");x.fillStyle=g;x.beginPath();x.arc(o.x,o.y,o.s*3.2,0,Math.PI*2);x.fill()}else{x.fillStyle="rgba(255,255,255,.82)";x.beginPath();x.arc(o.x,o.y,o.s,0,Math.PI*2);x.fill()}x.restore()}};
+const draw=(move=true)=>{x.clearRect(0,0,w,h);t+=move?1:0;for(const o of p){if(move){if(e==="Fireflies"){o.x+=(o.q>Math.PI?-1:1)*(.12+o.v*.12);o.y+=Math.sin(t/95+o.q)*.06}else if(e==="Rain"){o.y+=o.v*Math.max(1,o.s/5);o.x+=Math.sin(t/130+o.q)*.018}else if(e==="Snow"){o.y+=o.v;o.x+=o.d+wind}else{o.y+=o.v;o.x+=o.d+Math.sin(t/70+o.q)*.16}if(e==="Fireflies"){if(o.x>w+30){o.x=-30;o.y=Math.random()*h}else if(o.x< -30){o.x=w+30;o.y=Math.random()*h}}else if(o.y>h+30||o.x< -30||o.x>w+30)Object.assign(o,make(false))}x.save();x.globalAlpha=e==="Fireflies"?o.a*Math.pow(Math.max(0,Math.sin(t/(72+o.q*8)+o.q)),5):o.a;if(e==="Rain")rain(o);else if(e==="Sakura"){const pw=o.s*.78,ph=o.s;x.globalAlpha*=.9-Math.min(.7,o.y/Math.max(1,h)*.7);x.translate(o.x,o.y);x.rotate(Math.sin(t/34+o.q)*.48+o.q);if(Math.sin(t/42+o.q)<0)x.scale(-1,1);const g=x.createLinearGradient(-pw/2,-ph/2,pw/2,ph/2);g.addColorStop(0,"rgba(255,183,197,.92)");g.addColorStop(1,"rgba(255,197,208,.9)");x.fillStyle=g;x.beginPath();x.moveTo(-pw*.52,0);x.bezierCurveTo(-pw*.35,-ph*.48,pw*.32,-ph*.55,pw*.52,0);x.bezierCurveTo(pw*.3,ph*.42,-pw*.25,ph*.55,-pw*.52,0);x.closePath();x.fill()}else if(e==="Snowflakes")flake(o);else if(e==="Fireflies"){const g=x.createRadialGradient(o.x,o.y,0,o.x,o.y,o.s*3.2);g.addColorStop(0,"rgba("+rgb+",1)");g.addColorStop(.24,"rgba("+rgb+",.7)");g.addColorStop(1,"rgba("+rgb+",0)");x.fillStyle=g;x.beginPath();x.arc(o.x,o.y,o.s*3.2,0,Math.PI*2);x.fill()}else{x.fillStyle="rgba("+rgb+",.82)";x.beginPath();x.arc(o.x,o.y,o.s,0,Math.PI*2);x.fill()}x.restore()}};
 const tick=()=>{draw(true);raf=requestAnimationFrame(tick)};new ResizeObserver(()=>{resize();if(reduce)draw(false)}).observe(c);if(e==="Snow")addEventListener("pointermove",a=>{wind=(a.clientX/Math.max(1,innerWidth)-.5)*1.4},{passive:true});resize();reduce?draw(false):tick();document.addEventListener("visibilitychange",()=>{cancelAnimationFrame(raf);if(!reduce&&!document.hidden)tick()})})();
 </script>"""
 
@@ -656,10 +572,10 @@ PUBLIC_SAKURA_EFFECT = """<style>
 const ri=(a,b)=>Math.floor(Math.random()*(b-a+1))+a,bl=["soft-left","medium-left","soft-right","medium-right"],sw=Array.from({length:9},(_,i)=>"sway-"+i);
 const create=()=>{setTimeout(()=>requestAnimationFrame(create),300);const ft=innerHeight*.007+Math.round(Math.random()*5),b=bl[ri(0,bl.length-1)],s=sw[ri(0,sw.length-1)],h=ri(10,14),w=h-Math.floor(ri(0,10)/3),p=document.createElement("span");
 p.className="misa-sakura-petal";p.style.animation="misa-sakura-fall "+ft+"s linear 0s 1, misa-sakura-blow-"+b+" "+(Math.max(ft,30)-20+ri(0,20))+"s linear 0s infinite, misa-sakura-"+s+" "+ri(2,4)+"s linear 0s infinite";
-p.style.background="linear-gradient(120deg,rgba(255,183,197,.9),rgba(255,197,208,.9))";p.style.borderRadius=ri(14,14+Math.floor(Math.random()*10))+"px "+ri(1,Math.max(1,Math.floor(w/4)))+"px";p.style.height=h+"px";p.style.left=Math.random()*l.clientWidth-100+"px";p.style.marginTop=-(Math.floor(Math.random()*20)+15)+"px";p.style.width=w+"px";p.addEventListener("animationend",()=>p.remove(),{once:true});l.appendChild(p)};requestAnimationFrame(create)})();
+p.style.background=l.dataset.color?"linear-gradient(120deg,rgba("+l.dataset.color+",.9),rgba("+l.dataset.color+",.9))":"linear-gradient(120deg,rgba(255,183,197,.9),rgba(255,197,208,.9))";p.style.borderRadius=ri(14,14+Math.floor(Math.random()*10))+"px "+ri(1,Math.max(1,Math.floor(w/4)))+"px";p.style.height=h+"px";p.style.left=Math.random()*l.clientWidth-100+"px";p.style.marginTop=-(Math.floor(Math.random()*20)+15)+"px";p.style.width=w+"px";p.addEventListener("animationend",()=>p.remove(),{once:true});l.appendChild(p)};requestAnimationFrame(create)})();
 </script>"""
 
-def render_public_profile(config: dict, request: Request | None = None, widgets: list | None = None, default_fonts: list[dict] | None = None, asks: list | None = None, signatures: list | None = None, tally: dict | None = None, doodles: list | None = None) -> str:
+def render_public_profile(config: dict, request: Request | None = None, widgets: list | None = None, default_fonts: list[dict] | None = None) -> str:
     incoming = config if isinstance(config, dict) else {}
     discord_live = incoming.get("discord") if isinstance(incoming.get("discord"), dict) else {}
     rank = incoming.get("rank") if isinstance(incoming.get("rank"), dict) else None
@@ -670,6 +586,7 @@ def render_public_profile(config: dict, request: Request | None = None, widgets:
         config["rank"] = rank
     profile = config.get("profile") or {}
     settings = config.get("settings") or {}
+    premium = settings.get("premium") or {}
     assets = config.get("assets") or {}
     username_raw = str(profile.get("username") or "user")
     username = escape(username_raw)
@@ -684,7 +601,7 @@ def render_public_profile(config: dict, request: Request | None = None, widgets:
     asset_src = lambda kind: f"/api/v1/profile/{escape(username_raw, quote=True)}/assets/{kind}"
     raw_description = str(profile.get("description") or "")
     description = escape(raw_description)
-    bio_lines = [line.strip() for line in raw_description.splitlines() if line.strip()][:8]
+    bio_lines = premium.get("typewriterTexts") or [line.strip() for line in raw_description.splitlines() if line.strip()][:8]
     location = escape(str(profile.get("location") or ""))
     accent = css_hex_color(settings.get("accentColor"), "#9b87f5")
     username_color = css_hex_color(settings.get("usernameColor"), "#ffffff")
@@ -695,15 +612,15 @@ def render_public_profile(config: dict, request: Request | None = None, widgets:
     profile_opacity = _clamp(settings.get("profileOpacity"), 10, 0, 80) / 100
     background_opacity = _clamp(settings.get("backgroundOpacity"), 88, 20, 100) / 100
     profile_blur = _clamp(settings.get("profileBlur"), 24, 0, 40)
-    profile_radius = _clamp(settings.get("profileRadius"), 24, 0, 40)
+    profile_radius = _clamp(settings.get("profileRadius"), 24, 0, 80)
     profile_frame_opacity = _clamp(settings.get("profileFrameOpacity"), 100, 0, 100) / 100
     username_effect = settings.get("usernameEffect") if settings.get("usernameEffect") in USERNAME_EFFECTS else "Glow"
-    layout = settings.get("layout") if settings.get("layout") in {"Modern", "Simplistic", "Sleek"} else "Modern"
+    layout = settings.get("layout") if settings.get("layout") in {"Default", "Modern", "Simplistic", "Sleek", "Portfolio"} else "Modern"
     avatar_shape = settings.get("avatarShape") if settings.get("avatarShape") in {"circle", "rounded", "square"} else "circle"
     banner_shape = settings.get("bannerShape") if settings.get("bannerShape") in {"rounded", "square", "pill"} else "rounded"
     button_style = settings.get("buttonStyle") if settings.get("buttonStyle") in {"glass", "solid", "outline"} else "glass"
     profile_font = settings.get("profileFont") if settings.get("profileFont") in PROFILE_FONTS else "Inter"
-    profile_font_scope = "name"
+    profile_font_scope = "all" if settings.get("profileFontScope") == "all" else "name"
     font_size = _clamp(settings.get("fontSize"), 16, 12, 22)
     letter_spacing = _clamp(settings.get("letterSpacing"), 0, -2, 8)
     bio_typewriter = bool(settings.get("bioTypewriter")) and bool(bio_lines)
@@ -718,22 +635,23 @@ def render_public_profile(config: dict, request: Request | None = None, widgets:
     show_avatar_border = bool(settings.get("showAvatarBorder", True))
     show_display_name = bool(settings.get("showDisplayName", True))
     show_username = bool(settings.get("showUsername", True))
-    frame_scale = _clamp(settings.get("profileFrameScale"), 100, 50, 150) / 100
-    frame_width = _clamp(settings.get("profileFrameWidth"), 430, 260, 800)
-    stored_frame_height = _clamp(settings.get("profileFrameHeight"), 0, 0, 1000)
-    frame_height = stored_frame_height if stored_frame_height >= 200 else 0
-    frame_height_css = f"min-height:{frame_height}px;" if frame_height else ""
-    frame_x = _clamp(settings.get("profileFrameX"), 0, -45, 45)
-    frame_y = _clamp(settings.get("profileFrameY"), 0, -45, 45)
     border_color = css_hex_color(settings.get("borderColor"), "#ffffff")
-    border_width = _clamp(settings.get("borderWidth"), 1, 0, 8)
+    border_width = _clamp(settings.get("borderWidth"), 1, 0, 8) if premium.get("borderEnabled", True) else 0
     widget_swap = bool(settings.get("widgetColorSwap"))
     card_tilt = 1 if settings.get("cardTilt") else 0
     page_enter = settings.get("pageEnter") if settings.get("pageEnter") in PAGE_ENTERS else "Fade"
     click_sound_on = 1 if settings.get("clickSound") else 0
     has_click = has_public_asset(assets, "clickSound", "audio")
     entry_on = bool(settings.get("entryScreen"))
-    entry_text = escape(str(settings.get("entryText") or "click to enter..."))
+    entry_text = escape(str(settings.get("entryText") or "Click anywhere to enter"))
+    if entry_text == "click to enter...":
+        entry_text = "Click anywhere to enter"
+    entry_subtitle = escape(premium.get("entrySubtitle") or "")
+    entry_icon = f'<img src="{asset_src("entryIcon")}" alt="" class="profile-entry-icon">' if has_public_asset(assets, "entryIcon", "image") else ""
+    runtime_options = json.dumps({"video": str(assets.get("audioSource") or ("tracks" if assets.get("tracks") else "standalone" if (assets.get("audio") or {}).get("url") else "video")) == "video", "background": settings.get("backgroundColor", "#08080d"), "image": asset_src("background") if (assets.get("background") or {}).get("url") else None, "volume": _clamp(assets.get("volume"), 65, 0, 100) / 100}).replace("<", "\\u003c")
+    volume_runtime = '<script type="module">import {mountVolume} from "/dashboard/profile-volume.mjs";mountVolume(document.body,' + runtime_options + ');</script>' if assets.get("tracks") or (assets.get("audio") or {}).get("url") or ((assets.get("backgroundVideo") or {}).get("url") and assets.get("audioEnabled", True)) else ""
+    cursor_module = {"Cursor Cat": "cat", "Snowflakes": "snowflakes", "Ghost Cursor": "ghost", "Following Dot": "dot", "Bubbles": "bubbles"}.get(premium.get("cursorEffect"))
+    cursor_runtime = '<script type="module">if(matchMedia("(pointer:fine)").matches&&!matchMedia("(prefers-reduced-motion:reduce)").matches){const {mount}=await import("/dashboard/premium-cursors/' + cursor_module + '.mjs");mount(document.body,' + json.dumps(premium.get("cursorColor", "#ffffff")) + ');}</script>' if cursor_module else ""
     avatar_radius = {"square": "12px", "rounded": "22px"}.get(avatar_shape, "50%")
     banner_radius = {"square": "0", "pill": "999px"}.get(banner_shape, "18px")
     content_align = settings.get("socialAlign") if settings.get("socialAlign") in {"left", "center", "right"} else "center"
@@ -743,7 +661,7 @@ def render_public_profile(config: dict, request: Request | None = None, widgets:
     has_font = has_public_asset(assets, "customFont", "font")
     if has_font:
         font_stack = f"MisaProfile,{font_stack}"
-    page_font_stack = "Inter,system-ui,sans-serif"
+    page_font_stack = font_stack if profile_font_scope == "all" else "Inter,system-ui,sans-serif"
     page_place = {"left": "flex-start", "right": "flex-end"}.get(card_align, "center")
     has_banner = has_public_asset(assets, "banner", "image")
     username_glow = bool(settings.get("usernameGlow")) or username_effect == "Glow"
@@ -769,7 +687,7 @@ def render_public_profile(config: dict, request: Request | None = None, widgets:
         name_class += " name-wave"
     elif username_effect == "Shadow":
         name_class += " name-shadow"
-    name_style = f"font-size:{font_size + 8}px;letter-spacing:{letter_spacing}px;color:{username_color};"
+    name_style = f"font-size:var(--profile-name-size,{font_size + 8}px);letter-spacing:{letter_spacing}px;color:{username_color};"
     name_style += f"font-family:{font_stack};"
     if username_effect in {"Gradient", "Shimmer"}:
         name_style += f"background:linear-gradient(90deg,{username_color},{username_effect_color},{username_color});-webkit-background-clip:text;background-clip:text;color:transparent;"
@@ -816,7 +734,7 @@ def render_public_profile(config: dict, request: Request | None = None, widgets:
     avatar_tag = f'<div class="avatar-ring{avatar_border_class}"><div class="avatar-inner{avatar_border_class}">{avatar_face}</div>{deco_tag}{status_tag}</div>' if show_avatar else ""
     guild_img = f'<img src="{guild_badge}" alt="" onerror="this.remove()">' if guild_badge else ""
     guild_tag = f'<span class="guild-tag">{guild_img}{guild_tag_text}</span>' if guild_tag_text else ""
-    video_muted = " muted" if audio_source != "video" else ""
+    video_muted = " muted"
     video_tag = (
         f'<video class="bg-video" autoplay{video_muted} loop playsinline src="{asset_src("backgroundVideo")}"></video>'
         if has_video
@@ -827,9 +745,11 @@ def render_public_profile(config: dict, request: Request | None = None, widgets:
         if has_effect_video
         else ""
     )
-    sakura_effect_tag = '<div id="sakura-effect" class="bg-effect" aria-hidden="true"></div>' if background_effect == "Sakura" else ""
+    effect_color = (premium.get("effectColors") or {}).get(background_effect, "")
+    effect_rgb = ",".join(str(int(effect_color[i:i+2], 16)) for i in (1,3,5)) if effect_color else ""
+    sakura_effect_tag = f'<div id="sakura-effect" class="bg-effect" data-color="{effect_rgb}" aria-hidden="true"></div>' if background_effect == "Sakura" else ""
     rain_effect_tag = '<iframe class="bg-effect codrops-rain-effect" src="/dashboard/vendor/rain-effect/profile.html#slide-2" title="Codrops rain effect" aria-hidden="true" tabindex="-1"></iframe>' if background_effect == "Rain" else ""
-    effect_canvas_tag = f'<canvas id="bg-particles" class="bg-effect" data-effect="{escape(background_effect, quote=True)}" aria-hidden="true"></canvas>' if background_effect not in {"None", "Sakura", "Rain"} else ""
+    effect_canvas_tag = f'<canvas id="bg-particles" class="bg-effect" data-color="{effect_rgb}" data-effect="{escape(background_effect, quote=True)}" aria-hidden="true"></canvas>' if background_effect not in {"None", "Sakura", "Rain"} else ""
     playlist = public_playlist(username_raw, assets) if audio_source == "tracks" else []
     if audio_source == "standalone" and asset_src("audio"):
         playlist = [{
@@ -863,6 +783,8 @@ def render_public_profile(config: dict, request: Request | None = None, widgets:
         if playlist
         else ""
     )
+    if has_video and audio_source == "video" and audio_enabled:
+        audio_controls = f'<div class="player"><div class="player-layout"><span class="player-meta">Background video</span><button id="video-audio-toggle" type="button" class="audio-btn" aria-pressed="false" style="width:auto;padding:8px">Enable audio</button><input id="video-volume" type="range" min="0" max="100" value="{round(volume_ratio * 100)}" aria-label="Video volume" style="min-width:0;max-width:100%"></div></div>'
     presence_pfp = safe_discord_img(discord.get("accountAvatar") or discord.get("avatar"))
     presence_face = (
         f'<img class="discord-presence-image" src="{presence_pfp}" alt="" width="44" height="44">'
@@ -884,8 +806,7 @@ def render_public_profile(config: dict, request: Request | None = None, widgets:
         if settings.get("showDiscordStatus", True) and (presence_pfp or discord_status)
         else ""
     )
-    if discord_tile or audio_controls:
-        audio_controls = f'<div class="player-row">{discord_tile}{audio_controls}</div>'
+
     wash_style = (
         f"background-image:radial-gradient(circle at 19% 10%,{accent}4d,transparent 28%),"
         f"radial-gradient(circle at 80% 75%,{accent}26,transparent 32%),"
@@ -908,7 +829,7 @@ def render_public_profile(config: dict, request: Request | None = None, widgets:
         if use_gradient
         else f"rgba(8,8,13,{card_opacity})"
     )
-    border_css = _color_with_alpha(border_color, profile_frame_opacity)
+    border_css = _color_with_alpha(border_color, profile_frame_opacity * premium.get("borderOpacity", 100) / 100)
     card_shadow = (
         f"0 12px 40px rgba(0,0,0,{0.22 * profile_frame_opacity:.3f})"
         if layout == "Simplistic"
@@ -962,30 +883,30 @@ def render_public_profile(config: dict, request: Request | None = None, widgets:
     )
     display_name_tag = f'<h1 id="display-name" class="{name_class}" style="{name_style}">{display_name}</h1>' if show_display_name else ""
     handle_tag = f'<p class="handle">@{username}</p>' if show_username else ""
-    ask_box = _public_asks_markup(asks, username_raw, display_name, request) if settings.get("asks") else ""
-    guestbook_block = _public_guestbook_markup(signatures, username_raw, display_name, request) if settings.get("guestbook") else ""
-    tally_block = _public_tally_markup(tally, username_raw, request) if settings.get("tally") and tally else ""
-    doodles_block = _public_doodles_markup(doodles, username_raw, request) if settings.get("doodles") and doodles is not None else ""
-    feature_block_markup = feature_blocks_html(settings)
-    identity = (
-        f'<div class="name-row">{display_name_tag}{guild_tag}{verified}{badges_tag}</div>'
-        f'{handle_tag}{description_tag}{location_tag}'
-        f'<div class="socials">{links}</div>{_public_widgets_markup(widgets)}{_public_sections_markup(config, username_raw)}'
-        f'{feature_block_markup}'
-        f'{guestbook_block}'
-        f'{tally_block}'
-        f'{doodles_block}'
-        f'{ask_box}'
-    )
+    identity = f'<div class="profile-identity"><div class="name-row">{display_name_tag}{guild_tag}{verified}{badges_tag}</div>{handle_tag}{description_tag}{location_tag}</div>'
+    discord_element = f'<div class="profile-media-slot"><div class="profile-element profile-element-discord" data-layout-element="discord" style="{element_style(settings, "discord")}">{discord_tile}</div></div>' if discord_tile else ""
+    widget_markup = _public_widgets_markup([w for w in (widgets or []) if w.get("id") in {item.get("id") for item in config.get("widgets", [])}], settings)
+    # Keep a single widget resolver / polling target; CSS places its cards beside presence.
+    modules = f'<div class="profile-media-row" data-profile-media-row>{discord_element}{widget_markup}</div><div class="socials">{links}</div>{_public_sections_markup(config, username_raw)}{meta_tag}'
     if layout == "Sleek":
-        card_inner = f'<div class="sleek-hero">{banner_tag}{avatar_tag}</div><div class="sleek-body">{identity}</div>'
-    elif layout == "Simplistic":
-        card_inner = f'{avatar_tag}{identity}'
+        card_inner = f'<div class="sleek-hero">{banner_tag}{avatar_tag}</div><div class="sleek-body">{identity}{modules}</div>'
     else:
-        card_inner = f'{banner_tag}<div class="{"card-body after-banner" if has_banner else "card-body"}">{avatar_tag}{identity}</div>'
-    media_dock = f'<div class="media-dock"{" hidden" if entry_on else ""}>{audio_controls}</div>' if audio_controls else ""
+        card_inner = f'{banner_tag if layout == "Modern" else ""}<div class="card-body"><div class="profile-header" data-identity-align="{content_align}">{avatar_tag}{identity}</div>{modules}</div>'
+    if layout == "Portfolio":
+        hero_meta = f'<div class="portfolio-metadata">{views_tag}{location_tag}</div>' if views_tag or location_tag else ""
+        sections = _public_sections_markup(config, username_raw)
+        scroll = '<button type="button" class="portfolio-scroll" data-portfolio-next>Scroll for more<span aria-hidden="true">&#8595;</span></button>' if sections else ""
+        hero = str(premium.get("hero") or "Classic").lower()
+        identity_align = "center" if hero == "centered" else content_align
+        first = f'<div class="profile-element profile-element-frame" data-layout-element="frame" style="{element_style(settings, "frame")}"><div class="card profile-glass portfolio-first-frame" style="background:{card_background if frame_visible else "transparent"};backdrop-filter:blur({card_blur if frame_visible else 0}px);box-shadow:{card_shadow if frame_visible else "none"}"><div class="profile-header" data-identity-align="{identity_align}">{avatar_tag}{identity}</div><div class="profile-media-row" data-profile-media-row>{discord_element}{widget_markup}</div><div class="socials">{links}</div>{meta_tag}</div></div>'
+        card_inner = f'<div class="portfolio-profile" data-hero="{hero}"><section class="portfolio-hero" data-portfolio-section="hero" aria-label="Profile">{first}<div class="profile-mobile-audio" data-profile-mobile-audio></div>{scroll}</section>{sections}</div>'
+    media_dock = f'<div class="profile-media-slot profile-audio-slot"><div class="profile-element profile-element-audio" data-layout-element="audio" style="{element_style(settings, "audio")}"><div class="media-dock"{" hidden" if entry_on else ""}>{audio_controls}</div></div></div>' if audio_controls else ""
+    if layout == "Portfolio":
+        composition_markup = f'<div class="profile-composition"><main data-profile-variant="Portfolio" id="profile-card"{" hidden" if entry_on else ""}>{card_inner}</main><div class="profile-mobile-audio" data-profile-mobile-audio>{media_dock}</div></div>{hero_meta}'
+    else:
+        composition_markup = f'<div class="profile-composition"><div class="profile-element profile-element-frame" data-layout-element="frame" style="{element_style(settings, "frame")}"><div class="card-stage"><main data-profile-variant="{layout}" class="card profile-glass{' no-frame' if not frame_visible else ""}" id="profile-card"{" hidden" if entry_on else ""}>{card_inner}</main></div></div><div class="profile-mobile-audio" data-profile-mobile-audio>{media_dock}</div></div>'
     return f"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{page_title}</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>{page_title}</title>
 <meta name="description" content="{share_description}">
 <meta name="theme-color" content="{accent}">
 <link rel="canonical" href="{page_url}">
@@ -1012,7 +933,6 @@ html::-webkit-scrollbar,body::-webkit-scrollbar,.lyrics::-webkit-scrollbar{{disp
 {cursor_css}
 .has-cursor,.has-cursor *{{cursor:var(--cursor, auto)}}
 body{{position:relative;display:flex;align-items:center;justify-content:{page_place};padding:32px 16px;overflow:auto{";perspective:900px" if card_tilt else ""}}}
-.card-stage{{--frame-scale:{frame_scale};position:relative;z-index:3;width:min(92vw,{frame_width}px);transform:translate({frame_x}vw,{frame_y}vh) scale(var(--frame-scale));transform-origin:center;}}
 #profile-audio{{position:absolute;width:0;height:0;opacity:0;pointer-events:none}}
 .bg-wash,.bg-image,.bg-video,.bg-effect,.backdrop{{position:fixed;inset:0;pointer-events:none}}
 .bg-wash,.bg-image,.bg-video{{z-index:0}}
@@ -1020,7 +940,7 @@ body{{position:relative;display:flex;align-items:center;justify-content:{page_pl
 .backdrop{{z-index:1}}
 .bg-effect{{z-index:2;background:transparent}}
 .codrops-rain-effect{{border:0}}
-.card{{position:relative;width:100%;{frame_height_css}margin:0;padding:{card_padding};border:{border_width}px solid {border_css};border-radius:{profile_radius}px;background:{card_background};backdrop-filter:blur({card_blur}px);box-shadow:{card_shadow};text-align:{content_align};overflow:hidden;pointer-events:auto{";transform-style:preserve-3d" if card_tilt else ""}}}
+.card{{position:relative;width:100%;min-height:inherit;margin:0;padding:{card_padding};border:{border_width}px {"dashed" if premium.get("borderType") == "Dashed" else "solid"} {border_css};border-radius:{profile_radius}px;background:{card_background};backdrop-filter:blur({card_blur}px);box-shadow:{card_shadow};text-align:{content_align};overflow:hidden;pointer-events:auto{";transform-style:preserve-3d" if card_tilt else ""}}}
 .card.no-frame{{border-color:transparent;background:transparent;backdrop-filter:none;box-shadow:none}}
 .card.no-frame::before{{display:none}}
 .card-body.after-banner{{padding-top:20px}}
@@ -1103,7 +1023,6 @@ h1{{margin:0;font-size:24px;font-weight:600;letter-spacing:-.04em;color:#fff}}
 #copy-toast{{position:fixed;bottom:24px;left:50%;z-index:5;transform:translateX(-50%);padding:8px 12px;border-radius:999px;background:#111118ee;color:#fff;font-size:12px}}
 #copy-toast[hidden],.card[hidden],.media-dock[hidden],.meta[hidden],.entry[hidden]{{display:none}}
 .media-dock{{position:relative;z-index:4;width:100%;margin-top:24px;pointer-events:auto;container-type:inline-size}}
-.player-row{{display:flex;min-height:80px;align-items:stretch;gap:10px;width:100%;min-width:0;max-width:100%;margin:0;overflow:hidden}}
 .discord-presence{{position:relative;display:flex;flex:0 0 42%;width:42%;min-width:0;min-height:80px;align-items:center;overflow:hidden;padding:12px;border:1px solid #ffffff1a;border-radius:18px;background:#00000040;text-align:left}}
 .discord-presence-body{{display:grid;width:100%;min-width:0;grid-template-columns:44px minmax(0,1fr);grid-template-rows:auto auto;align-items:center;gap:2px 10px;overflow:hidden}}
 .discord-presence-avatar{{position:relative;grid-row:1/3;width:44px;height:44px;flex:none;overflow:visible}}
@@ -1113,8 +1032,6 @@ h1{{margin:0;font-size:24px;font-weight:600;letter-spacing:-.04em;color:#fff}}
 .discord-presence-name,.discord-presence-status{{width:100%;min-width:0;max-width:100%;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
 .discord-presence-name{{color:#fff;font-size:13px;font-weight:600;line-height:1.2;text-align:left}}
 .discord-presence-status{{color:#ffffff8c;font-size:10px;line-height:1.2;text-align:left}}
-.player-row>.player{{height:80px;flex:1 1 auto;min-width:0;max-width:100%;margin-top:0;overflow:hidden}}
-.discord-presence:only-child,.player-row>.player:only-child{{width:100%;flex:1 1 100%}}
 .player{{position:relative;z-index:5;width:100%;min-width:0;max-width:100%;margin-top:24px;padding:12px;overflow:hidden;border:1px solid #ffffff1a;border-radius:18px;background:#00000040;text-align:left;pointer-events:auto;isolation:isolate}}
 .player-layout{{display:flex;min-width:0;align-items:center;gap:12px;overflow:hidden}}
 .player-art{{display:block;width:clamp(48px,14vw,56px);height:clamp(48px,14vw,56px);min-width:48px;min-height:48px;max-width:56px;max-height:56px;flex:0 0 clamp(48px,14vw,56px);overflow:hidden;border-radius:12px;object-fit:cover;background:#ffffff10}}
@@ -1128,11 +1045,6 @@ h1{{margin:0;font-size:24px;font-weight:600;letter-spacing:-.04em;color:#fff}}
 .audio-btn{{position:relative;z-index:1;display:inline-flex;width:28px;height:32px;flex:none;align-items:center;justify-content:center;overflow:hidden;border:0;border-radius:9px;background:transparent;color:#ffffff73;cursor:pointer;pointer-events:auto;-webkit-tap-highlight-color:transparent}}
 .audio-btn:hover{{background:#ffffff0d;color:#fff}}
 .audio-btn.play{{width:32px;height:36px;color:#ffffffcc}}
-.player-row .player-layout{{display:grid;grid-template-columns:48px minmax(0,1fr);grid-template-rows:auto auto;gap:6px 8px}}
-.player-row .player-art{{grid-row:1/3;width:48px;height:48px;min-width:48px;min-height:48px}}
-.player-row .player-controls{{grid-column:2;justify-content:flex-end}}
-@container (max-width:399px){{.player-row{{min-height:0;flex-direction:column}}.discord-presence{{width:100%;min-height:80px;flex:1 1 auto}}.player-row>.player{{width:100%;height:auto;min-height:80px}}.player-row .player-layout{{display:flex;gap:12px}}.player-row .player-art{{width:56px;height:56px;min-width:56px;min-height:56px}}.player-row .player-controls{{justify-content:flex-end}}}}
-@media(max-width:639px){{.player-row{{min-height:0;flex-direction:column}}.discord-presence{{width:100%;min-height:80px;flex:1 1 auto}}.player-row>.player{{width:100%;height:auto;min-height:80px}}.player-row .player-layout{{display:flex;gap:12px}}.player-row .player-art{{width:56px;height:56px;min-width:56px;min-height:56px}}.player-row .player-controls{{justify-content:flex-end}}}}
 .audio-btn::before,.audio-btn::after{{display:none!important;content:none!important}}
 .audio-icon{{display:block;width:16px;height:16px;flex:none;pointer-events:none}}
 .audio-btn.play .audio-icon{{width:17px;height:17px}}
@@ -1188,226 +1100,87 @@ h1{{margin:0;font-size:24px;font-weight:600;letter-spacing:-.04em;color:#fff}}
 .enter-fade{{animation:enter-fade .55s ease both}}
 .enter-unfold{{transform-origin:top center;animation:enter-unfold .55s ease both}}
 .enter-pop{{animation:enter-pop .45s cubic-bezier(.22,1,.36,1) both}}
-@media(max-width:639px){{body{{height:100vh;height:100dvh;min-height:100dvh;justify-content:center;padding:0;overflow:hidden}}.card-stage{{position:fixed;left:50%;top:50%;width:min(calc(100vw - 24px),{frame_width}px);max-width:calc(100vw - 24px);transform:translate(-50%,-50%) scale(var(--mobile-frame-scale,var(--frame-scale)));transform-origin:center}}}}
 @media (prefers-reduced-motion:reduce){{.enter-fade,.enter-unfold,.enter-pop{{animation:none}}.codrops-rain-effect{{display:none}}}}
-{PUBLIC_FEATURE_CSS if feature_block_markup else ""}
-{PUBLIC_ASK_CSS if (settings.get("asks") and asks is not None) else ""}
-{PUBLIC_GUESTBOOK_CSS if (settings.get("guestbook") and signatures is not None) else ""}
-{PUBLIC_TALLY_CSS if (settings.get("tally") and tally) else ""}
-{PUBLIC_DOODLE_CSS if (settings.get("doodles") and doodles is not None) else ""}
-</style></head>
-<body{body_class}{cursor_attr} data-profile-user="{username}" data-audio-enabled="{1 if audio_enabled else 0}" data-volume="{volume_ratio}" data-tilt="{card_tilt}" data-name-effect="{escape(username_effect, quote=True)}" data-tab-title="{tab_title_on}" data-bio-type-ms="{bio_type_ms}" data-bio-delete-ms="{bio_delete_ms}" data-bio-pause-ms="{bio_pause_ms}" data-page-enter="{escape(page_enter, quote=True)}" data-click-sound="{click_sound_on}"{f' data-click-src="{asset_src("clickSound")}"' if has_click else ""}>
+</style><link rel="stylesheet" href="/dashboard/profile-layout.css?v=20260922-about-3"></head>
+<body data-profile-layout data-profile-kind="{layout}" style="--misa-profile-font:{font_stack};--profile-text-size:{font_size}px;--portfolio-radius:{profile_radius}px;--portfolio-border:{border_width if frame_visible and premium.get("borderEnabled", True) else 0}px {"dashed" if premium.get("borderType") == "Dashed" else "solid"} {border_css}" data-premium-hero="{premium.get("hero", "Classic")}" data-premium-border="{premium.get("borderType", "Static")}"{body_class}{cursor_attr} data-profile-user="{username}" data-audio-enabled="{1 if audio_enabled else 0}" data-volume="{volume_ratio}" data-tilt="{card_tilt}" data-name-effect="{escape(username_effect, quote=True)}" data-tab-title="{tab_title_on}" data-bio-type-ms="{bio_type_ms}" data-bio-delete-ms="{bio_delete_ms}" data-bio-pause-ms="{bio_pause_ms}" data-page-enter="{escape(page_enter, quote=True)}" data-click-preset="{premium.get("clickPreset", "")}" data-click-sound="{click_sound_on}"{f' data-click-src="{asset_src("clickSound")}"' if has_click else ""}>
 {background_tag}{video_tag}<div class="backdrop"></div>{effect_canvas_tag}{sakura_effect_tag}{rain_effect_tag}{effect_video_tag if background_effect == "None" else ""}
-{f'<button type="button" id="entry" class="entry"><span class="entry-play"></span><small>{entry_text}</small></button>' if entry_on else ""}
-<div class="card-stage" data-frame-scale="{frame_scale}"><main class="card{' no-frame' if not frame_visible else ""}" id="profile-card"{' hidden' if entry_on else ""}>{card_inner}</main>{media_dock}</div>
-{meta_tag}
+{f'<button type="button" id="entry" class="entry profile-entry"><span>{entry_icon}<strong>{entry_text}</strong><span class="profile-entry-subtitle">{entry_subtitle}</span></span></button>' if entry_on else ""}
+{composition_markup}
 {audio_tag}
 {playlist_data}
 {bio_data}
 {title_data}
-{PUBLIC_RESPONSIVE_FRAME_SCRIPT}
 {PUBLIC_COPY_SCRIPT}
 {PUBLIC_ANALYTICS_SCRIPT}
 {PUBLIC_BACKGROUND_EFFECT_SCRIPT if effect_canvas_tag else ""}
 {PUBLIC_SAKURA_EFFECT if sakura_effect_tag else ""}
 {PUBLIC_BADGE_SCRIPT}
+{PUBLIC_MEDIA_LAYOUT_SCRIPT}
 {PUBLIC_WIDGET_SCRIPT}
 {PUBLIC_DISCORD_STATUS_SCRIPT if status_tag else ""}
-{PUBLIC_LYRICS_SCRIPT}
+{PUBLIC_EMPTY_SCRIPT}
+{PUBLIC_LYRICS_SCRIPT if any(s.get("enabled") and s.get("type") == "lyrics" for s in config.get("sections", [])) else ""}
+{volume_runtime}{cursor_runtime}
+{chr(60) + 'script type="module" src="/dashboard/portfolio-navigation.mjs?v=20260922-scroll"></script>' if layout == "Portfolio" else ""}
+<script type="module" src="/dashboard/profile-widgets.mjs"></script>
 </body></html>"""
 
 
-def _public_asks_markup(asks: list | None, username_raw: str, display_name: str, request: Request | None) -> str:
-    """Render the ask-the-owner block: the submission form plus answered asks."""
-    if asks is None:
-        return ""
-    notice = ""
-    if request is not None and "sent" in request.query_params:
-        notice = '<p class="ask-notice">Sent! Thanks.</p>'
-    cards: list[str] = []
-    for item in asks:
-        if not isinstance(item, dict):
-            continue
-        question = str(item.get("q") or "").strip()
-        answer = str(item.get("a") or "").strip()
-        if not question and not answer:
-            continue
-        question_html = escape(question[:PUBLIC_ASK_MAX_QUESTION])
-        answer_html = "<br>".join(escape(line) for line in answer.splitlines()) if answer else ""
-        answer_tag = f'<p class="ask-answer">{answer_html}</p>' if answer_html else ""
-        cards.append(f'<article class="ask-item"><h3 class="ask-q">{question_html}</h3>{answer_tag}</article>')
-    list_html = (
-        f'<div class="ask-list">{"".join(cards)}</div>'
-        if cards
-        else '<p class="ask-empty">No questions answered yet — ask one below!</p>'
-    )
-    slug = escape(username_raw[:24], quote=True)
-    recipient = escape(str(display_name or username_raw))
-    return (
-        '<section class="section askbox" data-misa-ask="1">'
-        "<h2>Ask me anything</h2>"
-        f"{notice}"
-        f'<form class="ask-form" method="post" action="/api/v1/profile/{slug}/asks">'
-        f'<label class="sr-only" for="ask-question">Your anonymous question for {recipient}</label>'
-        f'<textarea id="ask-question" name="question" rows="2" maxlength="{PUBLIC_ASK_MAX_QUESTION}" required placeholder="Ask {recipient} a question — it stays anonymous"></textarea>'
-        '<div class="ask-form-row">'
-        f'<input name="author" maxlength="{PUBLIC_ASK_MAX_AUTHOR}" placeholder="Your name (optional)" autocomplete="off">'
-        "<button type=\"submit\">Send</button>"
-        "</div>"
-        "</form>"
-        f"{list_html}"
-        "</section>"
-    )
-
-
-def _public_guestbook_markup(signatures: list | None, username_raw: str, display_name: str, request: Request | None) -> str:
-    """Render the visitor-book block: approved signatures plus a signing form."""
-    if signatures is None:
-        return ""
-    notice = ""
-    if request is not None and "signed" in request.query_params:
-        notice = '<p class="book-notice">Signed! Thanks.</p>'
-    rows: list[str] = []
-    for item in signatures:
-        if not isinstance(item, dict):
-            continue
-        line = str(item.get("line") or "").strip()
-        if not line:
-            continue
-        signer = escape(str(item.get("name") or "anonym")[:48])
-        when = escape(str(item.get("at") or "").split("T")[0])
-        line_html = "<br>".join(escape(part) for part in line.splitlines())
-        rows.append(f'<div class="book-row"><p>{line_html}</p><span>— {signer} · {when}</span></div>')
-    list_html = (
-        f'<div class="book-rows">{"".join(rows)}</div>'
-        if rows
-        else '<p class="book-empty">No signatures yet — be the first!</p>'
-    )
-    slug = escape(username_raw[:24], quote=True)
-    recipient = escape(str(display_name or username_raw))
-    return (
-        f'<section class="section guestbook" data-misa-guest="1">'
-        "<h2>Guestbook</h2>"
-        f"{notice}"
-        f"{list_html}"
-        f'<form class="book-form" method="post" action="/api/v1/profile/{slug}/guestbook">'
-        f'<label class="sr-only" for="book-line">Your line for {recipient}</label>'
-        f'<textarea id="book-line" name="line" rows="2" maxlength="400" required placeholder="Sign {recipient}\'s book — it needs their approval before it shows"></textarea>'
-        '<div class="book-form-row">'
-        f'<input name="name" maxlength="48" placeholder="Your name (optional)" autocomplete="off">'
-        '<button type="submit">Sign the book</button>'
-        "</div>"
-        "</form>"
-        "</section>"
-    )
-
-
-def _public_tally_markup(tally: dict, username_raw: str, request: Request | None) -> str:
-    """Render the visitor poll: question, bars, and a radio form to vote."""
-    question = str(tally.get("question") or "").strip()
-    options = [option for option in (tally.get("options") or []) if isinstance(option, dict)]
-    total = int(tally.get("total") or 0)
-    if not question or len(options) < 2:
-        return ""
-    notice = ""
-    if request is not None and "tallied" in request.query_params:
-        notice = '<p class="tally-sent">Tallied! Thanks.</p>'
-    rows: list[str] = []
-    for option in options:
-        name = escape(str(option.get("name") or "")[:80])
-        if not name:
-            continue
-        count = max(0, int(option.get("count") or 0))
-        share = round((count / total) * 100) if total else 0
-        rows.append(
-            '<div class="tally-row">'
-            f'<label class="tally-label"><input type="radio" name="option" value="{name}"><span>{name}</span><em style="margin-left:auto;font-style:normal;color:#ffffff80">{count}</em></label>'
-            f'<div class="tally-bar"><span style="width:{min(100, share)}%"></span></div>'
-            "</div>"
-        )
-    slug = escape(username_raw[:24], quote=True)
-    return (
-        f'<section class="section tallybox" data-misa-tally="1">'
-        f"<h2>Tally</h2>"
-        f'<p class="tally-q">{escape(question[:200])}</p>'
-        f"{notice}"
-        f'<form method="post" action="/api/v1/profile/{slug}/tally">'
-        f'<div class="tally-list">{"".join(rows)}</div>'
-        f'<button class="tally-btn" type="submit">Vote</button>'
-        f"</form>"
-        f'<p class="tally-meta">{total} {total == 1 and "vote" or "votes"} so far</p>'
-        "</section>"
-    )
-
-
-def _public_doodles_markup(doodles: list | None, username_raw: str, request: Request | None) -> str:
-    """Render the chalkboard: approved doodles and a tiny drawing widget."""
-    if doodles is None:
-        return ""
-    imgs = "".join(
-        f'<img src="{escape(str(item.get("svg") or ""), quote=True)}" alt="visitor doodle" loading="lazy">'
-        for item in doodles
-        if isinstance(item, dict) and str(item.get("svg") or "").strip()
-    )
-    grid = (
-        f'<div class="doodle-grid">{imgs}</div>'
-        if imgs
-        else '<p class="doodle-empty">The wall is blank — chalk the first one below!</p>'
-    )
-    slug = escape(username_raw[:24], quote=True)
-    script = _DOODLE_SCRIPT.replace("__ENDPOINT__", f"/api/v1/profile/{slug}/doodles")
-    return (
-        f'<section class="section doodlebox" data-misa-doodles="1">'
-        "<h2>Doodle wall</h2>"
-        f"{grid}"
-        '<div class="doodle-draw">'
-        '<canvas id="doodle-canvas" class="doodle-canvas" width="320" height="200" aria-label="Chalkboard — draw here"></canvas>'
-        '<div class="doodle-actions">'
-        '<button type="button" class="doodle-clear" id="doodle-clear">Clear</button>'
-        '<button type="button" class="doodle-post" id="doodle-post">Chalk it</button>'
-        "</div>"
-        '<p class="doodle-note" id="doodle-note"></p>'
-        "</div>"
-        "</section>"
-        f"<script>{script}</script>"
-    )
-
-
-_DOODLE_SCRIPT = """(function(){var c=document.getElementById("doodle-canvas");if(!c)return;var ctx=c.getContext("2d");var key="__ENDPOINT__";
-ctx.fillStyle="#000";ctx.fillRect(0,0,c.width,c.height);ctx.strokeStyle="#fff";ctx.lineWidth=5;ctx.lineCap="round";
-var drawing=false;function pos(e){var r=c.getBoundingClientRect();return{x:(e.clientX-r.left)*(c.width/r.width),y:(e.clientY-r.top)*(c.height/r.height)};}
-c.addEventListener("pointerdown",function(e){drawing=true;ctx.beginPath();var p=pos(e);ctx.moveTo(p.x,p.y);});
-c.addEventListener("pointermove",function(e){if(!drawing)return;var p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();});
-window.addEventListener("pointerup",function(){drawing=false;});
-document.getElementById("doodle-clear").addEventListener("click",function(){ctx.fillStyle="#000";ctx.fillRect(0,0,c.width,c.height);ctx.beginPath();});
-document.getElementById("doodle-post").addEventListener("click",function(){var btn=this;if(btn.getAttribute("aria-busy"))return;var data=c.toDataURL("image/png");
-btn.setAttribute("aria-busy","true");var note=document.getElementById("doodle-note");
-fetch(key,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({svg:data})})
-.then(function(r){return r.json().catch(function(){return{};}).then(function(d){return{ok:r.ok,d:d};});})
-.then(function(res){if(!res.ok){note.textContent=(res.d&&typeof res.d.detail==="string")?res.d.detail:"Could not post that just now.";return;}
-note.textContent="Chalked! It needs the owner's approval before it shows.";ctx.fillStyle="#000";ctx.fillRect(0,0,c.width,c.height);ctx.beginPath();})
-.catch(function(){note.textContent="Could not reach the server.";}).then(function(){btn.removeAttribute("aria-busy");});});})();"""
+def _empty_content_markup(title: str | None = None, subtitle: str | None = None) -> str:
+    heading = f"<h3>{escape(str(title))}</h3>" if title else ""
+    description = f"<p>{escape(str(subtitle))}</p>" if subtitle else ""
+    copy = f'<div class="profile-empty-copy">{heading}{description}</div>' if heading or description else ""
+    return f'<div class="profile-empty" aria-label="No content configured"><div data-empty-face aria-hidden="true"></div>{copy}</div>'
 
 
 def _public_sections_markup(config: dict, username: str) -> str:
     cards: list[str] = []
-    for item in config.get("sections") or []:
-        if not isinstance(item, dict) or not item.get("enabled") or not section_has_content(item):
-            continue
+    portfolio = (config.get("settings") or {}).get("layout") == "Portfolio"
+    rendered: list[tuple[dict, str]] = []
+    def append(markup: str) -> None:
+        rendered.append((item, markup))
+        cards.append(markup)
+    for item in visible_sections(config.get("sections") or []):
         kind = str(item.get("type") or "")
         title = escape(str(item.get("title") or "")[:80])
         heading = f"<h2>{title}</h2>" if title else ""
-        if kind in {"about", "text"}:
+        if kind == "integration" and not item.get("body") and not any((item.get(side) or {}).get("enabled") for side in ("leftCard", "rightCard")):
+            append(heading + _empty_content_markup(subtitle=item.get("subtitle")))
+            continue
+        if kind == "project" and not project_configured(item):
+            append(_empty_content_markup(item.get("title"), item.get("subtitle")))
+            continue
+        if kind in {"about", "text", "integration"}:
             body = render_safe_markdown(str(item.get("body") or ""))
-            if not body and not title:
+            if not body and not title and not item.get("subtitle") and not item.get("tags") and not any((item.get(side) or {}).get("enabled") for side in ("leftCard", "rightCard")):
                 continue
-            cards.append(f'<section class="section">{heading}{body}</section>')
+            body = f'<div class="profile-rich-text profile-introduction-card">{body}</div>' if body else ""
+            subtitle = escape(str(item.get("subtitle") or ""))
+            subtitle_markup = f"<p>{subtitle}</p>" if subtitle else ""
+            tags = "".join(f'<span class="section-tag">{escape(str(tag))}</span>' for tag in item.get("tags") or [])
+            side_cards = []
+            enabled_cards = [(side, suffix) for side, suffix in (("leftCard", "l"), ("rightCard", "r")) if (item.get(side) or {}).get("enabled")]
+            configured_cards = [(side, suffix) for side, suffix in enabled_cards if item[side].get("type") == "presence" or str(item[side].get("value") or "").strip()]
+            for side, suffix in configured_cards or enabled_cards[:1]:
+                card = item.get(side)
+                if not card or not card.get("enabled"):
+                    continue
+                if card.get("type") == "presence":
+                    presence = config.get("discord") or {}
+                    name = escape(str(presence.get("username") or "Discord"))
+                    status = escape(str(presence.get("status") or "Unavailable"))
+                    side_cards.append(f'<div class="widget"><div class="widget-meta"><strong>{name}</strong><span>{status}</span></div></div>')
+                elif not str(card.get("value") or "").strip():
+                    side_cards.append(_empty_content_markup())
+                else:
+                    side_cards.append(_public_widgets_markup([{**card, "id": str(item["id"])[:38] + "-" + suffix, "status": "empty", "title": card["type"], "subtitle": "LoadingÃ¢â‚¬Â¦"}]))
+            append(f'<section class="section profile-introduction">{heading}{subtitle_markup}{body}<div class="profile-skills" aria-label="Skills">{tags}</div><div class="profile-section-cards">{"".join(side_cards)}</div></section>')
             continue
         if kind == "skills":
             tags = "".join(f'<span class="section-tag">{escape(str(tag)[:24])}</span>' for tag in item.get("tags") or [])
             if not tags:
                 continue
-            cards.append(f'<section class="section">{heading}<div class="section-tags">{tags}</div></section>')
+            append(f'<div class="profile-skills" aria-label="Skills">{tags}</div>')
             continue
         if kind == "project":
             href = public_social_href(str(item.get("href") or ""), "Custom URL")
@@ -1420,27 +1193,39 @@ def _public_sections_markup(config: dict, username: str) -> str:
             tag_row = f'<div class="section-tags">{tags}</div>' if tags else ""
             inner = f'{cover}<div class="section-copy">{heading}{body}{tag_row}</div>'
             if href:
-                cards.append(f'<a class="section section-project" href="{escape(href, quote=True)}" target="_blank" rel="noopener noreferrer">{inner}</a>')
+                append(f'<a class="section section-project profile-project" href="{escape(href, quote=True)}" target="_blank" rel="noopener noreferrer">{inner}<span class="project-visit">visit <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M7 7h10v10" /></svg></span></a>')
             else:
-                cards.append(f'<section class="section section-project">{inner}</section>')
+                append(f'<section class="section section-project profile-project">{inner}</section>')
             continue
         if kind == "lyrics":
-            lines = parse_lyrics(str(item.get("body") or ""))
-            if not lines:
-                continue
-            rows = []
-            for line in lines:
-                text = escape(str(line.get("text") or ""))
-                stamp = line.get("t")
-                attr = f' data-t="{stamp}"' if isinstance(stamp, (int, float)) else ""
-                rows.append(f"<p{attr}>{text}</p>")
-            cards.append(f'<section class="section" data-lyrics="1">{heading}<div class="lyrics">{"".join(rows)}</div></section>')
+            body = escape(str(item.get("body") or ""), quote=True)
+            tracks = (config.get("assets") or {}).get("tracks") or []
+            first_track = escape(str(tracks[0].get("id") or ""), quote=True) if tracks else "track-1"
+            append(f'<section data-lyrics-body="{body}" data-lyrics-track="{first_track}" aria-label="Lyrics player"></section>')
+
     if not cards:
         return ""
-    return f'<div class="sections">{"".join(cards)}</div>'
+    if portfolio:
+        groups: list[list[tuple[dict, str]]] = []
+        for record in rendered:
+            if record[0].get("type") == "project" and groups and groups[-1][0][0].get("type") == "project":
+                groups[-1].append(record)
+            else:
+                groups.append([record])
+        cards = []
+        for group in groups:
+            first = group[0][0]
+            identity = escape(str(first.get("id") or ""), quote=True)
+            title = escape("Projects" if len(group) > 1 else str(first.get("title") or ""))
+            content = "".join(markup for _, markup in group)
+            if first.get("type") == "project":
+                content = f'<h2>{title}</h2><div class="portfolio-showcase{' portfolio-feature' if len(group) == 1 else ""}">{content}</div>'
+            cards.append(f'<section class="portfolio-section" data-portfolio-section="{identity}" data-section-title="{title}"><div class="portfolio-section-content">{content}</div></section>')
+    classes = "portfolio-sections" if portfolio else "sections profile-sections"
+    return f'<div class="{classes}">{"".join(cards)}</div>'
 
 
-def _public_widgets_markup(widgets: list | None) -> str:
+def _public_widgets_markup(widgets: list | None, settings: dict | None = None) -> str:
     cards: list[str] = []
     for item in widgets or []:
         if not isinstance(item, dict):
@@ -1465,9 +1250,11 @@ def _public_widgets_markup(widgets: list | None) -> str:
             cards.append(f'<a class="{cls}" href="{escape(href, quote=True)}" target="_blank" rel="noopener noreferrer"{extra}>{inner}</a>')
         else:
             cards.append(f'<div class="{cls}"{extra}>{inner}</div>')
+        element = "widget:" + str(item.get("id") or "")
+        cards[-1] = f'<div class="profile-media-slot"><div class="profile-element profile-element-widget" data-widget-id="{escape(str(item.get("id") or ""), quote=True)}" data-layout-element="{escape(element, quote=True)}" style="{element_style(settings or {}, element)}">{cards[-1]}</div></div>'
     if not cards:
         return ""
-    return f'<div class="widgets">{"".join(cards)}</div>'
+    return "".join(cards)
 
 
 def _public_social_markup(config: dict, global_icon_color: str) -> tuple[str, str]:

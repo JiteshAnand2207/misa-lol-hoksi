@@ -1,3 +1,5 @@
+from app.core.element_layout import normalize_layouts
+
 import base64
 import re
 from typing import Any
@@ -5,7 +7,6 @@ from urllib.parse import urlparse
 
 from app.core.network_safety import safe_media_url, safe_public_url
 from app.core.social_prefixes import compose_social_value, host_allowed
-from app.features import sanitize as feature_sanitize
 
 HEX_COLOR = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
 SAFE_ICON = re.compile(r"^data:image/(?:png|jpeg|jpg|webp|gif|ico|x-icon|vnd\.microsoft\.icon);base64,", re.I)
@@ -20,7 +21,7 @@ MAX_SOCIALS = 40
 MAX_BADGES = 40
 MAX_WIDGETS = 8
 MAX_SECTIONS = 12
-SECTION_TYPES = ("about", "project", "skills", "text", "lyrics")
+SECTION_TYPES = ("about", "project", "skills", "text", "lyrics", "integration")
 SECTION_ID = re.compile(r"^[a-zA-Z0-9_-]{2,40}$")
 MAX_SECTION_BODY = {
     "about": 4000,
@@ -43,8 +44,8 @@ MAX_VIDEO_ASSET = 145_000_000
 MAX_FONT = 2_800_000
 KEEP_ASSET_URL = "misa:keep"
 REMOVE_ASSET_URL = "misa:remove"
-ASSET_KINDS = ("avatar", "banner", "background", "cursor", "backgroundVideo", "backgroundEffectVideo", "audio", "audioArtwork", "ogImage", "favicon", "customFont", "clickSound")
-ASSET_KEYS = ("avatar", "banner", "background", "backgroundVideo", "backgroundEffectVideo", "audio", "audioArtwork", "cursor", "ogImage", "favicon", "customFont", "clickSound")
+ASSET_KINDS = ("avatar", "banner", "background", "cursor", "backgroundVideo", "backgroundEffectVideo", "audio", "audioArtwork", "ogImage", "favicon", "customFont", "clickSound", "entryIcon")
+ASSET_KEYS = ("avatar", "banner", "background", "backgroundVideo", "backgroundEffectVideo", "audio", "audioArtwork", "cursor", "ogImage", "favicon", "customFont", "clickSound", "entryIcon")
 BACKGROUND_EFFECTS = {"None", "Snowflakes", "Snow", "Sakura", "Rain", "Fireflies"}
 USERNAME_EFFECTS = {"None", "Glow", "Gradient", "Shimmer", "Rainbow", "Fuzzy", "Shuffle", "Sparkle", "Glitch", "Pulse", "Wave", "Shadow"}
 PROFILE_FONTS = {"Inter", "font-2", "font-3", "font-4", "font-5", "font-6", "font-7", "font-8", "font-9", "font-10", "font-11"}
@@ -62,6 +63,7 @@ ASSET_KIND_TYPES = {
     "favicon": "image",
     "customFont": "font",
     "clickSound": "audio",
+    "entryIcon": "image",
 }
 
 
@@ -103,17 +105,29 @@ def sanitize_profile_config(payload: dict[str, Any]) -> dict[str, Any]:
 
 def _sanitize_settings(settings: dict[str, Any]) -> dict[str, Any]:
     cleaned = dict(settings)
+    from app.core.premium import normalize_premium
+    premium = normalize_premium(cleaned.get("premium"))
+    if premium is not None:
+        cleaned["premium"] = premium
+    else:
+        cleaned.pop("premium", None)
+    if "elementLayouts" in cleaned:
+        layouts = normalize_layouts(cleaned["elementLayouts"])
+        if layouts is None:
+            cleaned.pop("elementLayouts", None)
+        else:
+            cleaned["elementLayouts"] = layouts
     align = cleaned.get("socialAlign")
     cleaned["socialAlign"] = align if align in {"left", "center", "right"} else "center"
     card_align = cleaned.get("cardAlign")
     cleaned["cardAlign"] = card_align if card_align in {"left", "center", "right"} else "center"
-    cleaned["layout"] = cleaned.get("layout") if cleaned.get("layout") in {"Modern", "Simplistic", "Sleek"} else "Modern"
+    cleaned["layout"] = cleaned.get("layout") if cleaned.get("layout") in {"Default", "Modern", "Simplistic", "Sleek", "Portfolio"} else "Modern"
     cleaned["avatarShape"] = cleaned.get("avatarShape") if cleaned.get("avatarShape") in {"circle", "rounded", "square"} else "circle"
     cleaned["bannerShape"] = cleaned.get("bannerShape") if cleaned.get("bannerShape") in {"rounded", "square", "pill"} else "rounded"
     cleaned["buttonStyle"] = cleaned.get("buttonStyle") if cleaned.get("buttonStyle") in {"glass", "solid", "outline"} else "glass"
     cleaned["profileFont"] = cleaned.get("profileFont") if cleaned.get("profileFont") in PROFILE_FONTS else "Inter"
     # Kept for backwards-compatible stored data, but custom/default fonts are now display-name only.
-    cleaned["profileFontScope"] = "name"
+    cleaned["profileFontScope"] = "all" if cleaned.get("profileFontScope") == "all" else "name"
     cleaned["pageEnter"] = cleaned.get("pageEnter") if cleaned.get("pageEnter") in PAGE_ENTERS else "Fade"
     for key, default in (
         ("accentColor", "#9b87f5"),
@@ -158,7 +172,7 @@ def _sanitize_settings(settings: dict[str, Any]) -> dict[str, Any]:
     cleaned["profileOpacity"] = _clamp_int(cleaned.get("profileOpacity"), 10, 0, 80)
     cleaned["backgroundOpacity"] = _clamp_int(cleaned.get("backgroundOpacity"), 88, 20, 100)
     cleaned["profileBlur"] = _clamp_int(cleaned.get("profileBlur"), 24, 0, 40)
-    cleaned["profileRadius"] = _clamp_int(cleaned.get("profileRadius"), 24, 0, 40)
+    cleaned["profileRadius"] = _clamp_int(cleaned.get("profileRadius"), 24, 0, 80)
     cleaned["profileFrameOpacity"] = _clamp_int(cleaned.get("profileFrameOpacity"), 100, 0, 100)
     cleaned["profileFrameScale"] = _clamp_int(cleaned.get("profileFrameScale"), 100, 50, 150)
     cleaned["profileFrameWidth"] = _clamp_int(cleaned.get("profileFrameWidth"), 430, 260, 800)
@@ -172,10 +186,9 @@ def _sanitize_settings(settings: dict[str, Any]) -> dict[str, Any]:
     cleaned["bioTypeMs"] = _clamp_int(cleaned.get("bioTypeMs"), 55, 20, 160)
     cleaned["bioDeleteMs"] = _clamp_int(cleaned.get("bioDeleteMs"), 35, 20, 160)
     cleaned["bioPauseMs"] = _clamp_int(cleaned.get("bioPauseMs"), 1200, 400, 4000)
-    cleaned["entryText"] = str(cleaned.get("entryText") or "click to enter...")[:80]
+    cleaned["entryText"] = str(cleaned.get("entryText") or "click to enter...")[:160]
     cleaned["ogTitle"] = _plain_text(cleaned.get("ogTitle"), 70)
     cleaned["ogDescription"] = _plain_text(cleaned.get("ogDescription"), 200)
-    cleaned.update(feature_sanitize.sanitize_all(cleaned))
     return cleaned
 
 
@@ -190,6 +203,7 @@ def _sanitize_assets(assets: dict[str, Any]) -> dict[str, Any]:
         ("favicon", "image"),
         ("customFont", "font"),
         ("clickSound", "audio"),
+        ("entryIcon", "image"),
         ("backgroundVideo", "video"),
         ("backgroundEffectVideo", "video"),
         ("audio", "audio"),
@@ -215,7 +229,7 @@ def _sanitize_assets(assets: dict[str, Any]) -> dict[str, Any]:
     if source not in {"video", "standalone", "tracks"}:
         source = "tracks" if cleaned["tracks"] else "standalone" if (cleaned.get("audio") or {}).get("url") else "video"
     cleaned["audioSource"] = source
-    if cleaned["tracks"]:
+    if cleaned["tracks"] and source == "tracks":
         first = cleaned["tracks"][0]
         cleaned["audio"] = {
             "url": None,
@@ -377,6 +391,7 @@ def _sanitize_tracks(assets: dict[str, Any]) -> list[dict[str, Any]]:
             tracks.append({
                 "id": track_id,
                 "title": title,
+                "recording": sanitize_recording(item.get("recording")),
                 "audio": {
                     "url": audio_url,
                     "name": str((audio or {}).get("name") or "")[:80],
@@ -405,8 +420,8 @@ def _sanitize_tracks(assets: dict[str, Any]) -> list[dict[str, Any]]:
     return tracks
 
 
-def public_playlist(username: str, assets: dict[str, Any] | None) -> list[dict[str, str]]:
-    items: list[dict[str, str]] = []
+def public_playlist(username: str, assets: dict[str, Any] | None) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
     for track in (assets or {}).get("tracks") or []:
         if not isinstance(track, dict) or not track.get("id"):
             continue
@@ -414,6 +429,7 @@ def public_playlist(username: str, assets: dict[str, Any] | None) -> list[dict[s
         items.append({
             "id": track_id,
             "title": str(track.get("title") or "Track")[:80],
+            "recording": sanitize_recording(track.get("recording")),
             "audio": f"/api/v1/profile/{username}/tracks/{track_id}/audio",
             "artwork": f"/api/v1/profile/{username}/tracks/{track_id}/artwork",
         })
@@ -616,7 +632,9 @@ def sanitize_sections(raw: Any) -> list[dict[str, Any]]:
             "title": _plain_text(item.get("title"), 80),
             "body": _plain_multiline(item.get("body"), MAX_SECTION_BODY.get(kind, 2000)),
             "href": href,
-            "tags": tags if kind in {"project", "skills"} else [],
+            "tags": tags if kind in {"about", "project", "skills"} else [],
+            "subtitle": _plain_text(item.get("subtitle"), 160),
+            **{side: sanitize_side_card(item.get(side), section_id + ("-l" if side == "leftCard" else "-r")) for side in ("leftCard", "rightCard") if isinstance(item.get(side), dict)},
             "cover": {
                 "url": _safe_asset_url(cover.get("url"), "image") if kind == "project" else None,
                 "name": str(cover.get("name") or "")[:80],
@@ -626,6 +644,13 @@ def sanitize_sections(raw: Any) -> list[dict[str, Any]]:
         if len(cleaned) >= MAX_SECTIONS:
             break
     return cleaned
+
+
+def sanitize_side_card(raw, card_id):
+    if raw.get("type") == "presence":
+        return {"enabled": raw.get("enabled") is True, "type": "presence", "value": ""}
+    cards = sanitize_widgets([{**raw, "id": card_id[:40]}])
+    return {key: cards[0][key] for key in ("enabled", "type", "value")} if cards else {"enabled": False, "type": "timezone", "value": "UTC"}
 
 
 def _plain_multiline(value: Any, limit: int) -> str:
@@ -745,3 +770,15 @@ def public_social_href(value: str, platform: str) -> str | None:
     if not host_allowed(platform, parsed.hostname or ""):
         return None
     return safe
+
+
+def sanitize_recording(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    try:
+        identity, duration = int(raw.get("id", 0)), float(raw.get("duration", 0))
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if identity <= 0 or identity > 2147483647 or not 0 < duration < 86400:
+        return None
+    return {"id": identity, "duration": duration, **{key: _plain_text(raw.get(key), 200) for key in ("title", "artist", "album")}}

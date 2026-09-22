@@ -8,6 +8,7 @@ export const SECTION_CATALOG: Array<{ id: SectionType; label: string; hint: stri
   { id: "skills", label: "Skills", hint: "A row of skill chips." },
   { id: "text", label: "Custom text", hint: "A free Markdown block." },
   { id: "lyrics", label: "Synced lyrics", hint: "LRC lines follow the music player." },
+  { id: "integration", label: "Integration cards", hint: "Independent provider cards." },
 ];
 
 const SECTION_TYPES = new Set(SECTION_CATALOG.map((item) => item.id));
@@ -30,6 +31,7 @@ export function defaultSection(type: SectionType): ProfileSection {
     skills: "Skills",
     text: "",
     lyrics: "Lyrics",
+    integration: "Connections",
   };
   return { id: createSectionId(type), type, enabled: true, title: titles[type], body: "", href: "", tags: [], cover: { url: null } };
 }
@@ -47,6 +49,9 @@ export function normalizeSections(raw: ProfileSection[] | undefined): ProfileSec
       id,
       type: item.type,
       enabled: Boolean(item.enabled),
+      subtitle: String(item.subtitle || "").slice(0, 160),
+      leftCard: item.leftCard,
+      rightCard: item.rightCard,
       title: String(item.title || "").slice(0, 80),
       body: String(item.body || "").slice(0, 8000),
       href: String(item.href || "").slice(0, 500),
@@ -54,19 +59,6 @@ export function normalizeSections(raw: ProfileSection[] | undefined): ProfileSec
       cover: { url: cover.url || null, name: cover.name || "", type: cover.type || "" },
     }];
   });
-}
-
-export function parseLyrics(body: string) {
-  return (body || "").split(/\r?\n/).flatMap((raw) => {
-    const text = raw.trim();
-    if (!text) return [];
-    const match = /^\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]\s*(.*)$/.exec(text);
-    if (match) {
-      const stamp = Number(match[1]) * 60 + Number(match[2]) + Number((match[3] || "0").padEnd(3, "0").slice(0, 3)) / 1000;
-      return [{ t: stamp, text: (match[4] || "").trim().slice(0, 200) }];
-    }
-    return [{ t: null as number | null, text: text.slice(0, 200) }];
-  }).slice(0, 200);
 }
 
 export function tagsFromInput(value: string) {

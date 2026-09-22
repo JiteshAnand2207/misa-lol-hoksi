@@ -1,14 +1,18 @@
 "use client";
 
+import { elementBox, updateElementLayout, type LayoutViewport } from "@/lib/element-layout";
 import { motion } from "framer-motion";
 import { SiDiscord } from "react-icons/si";
-import { AlignCenter, AlignLeft, AlignRight, AppWindow, Brush, CalendarDays, Check, CircleDot, Crop, Eye, Image as ImageIcon, Laptop, Layers, LayoutTemplate, Maximize2, Move, MousePointer2, Palette, PanelLeftClose, PanelLeftOpen, RotateCcw, Share2, Shield, SlidersHorizontal, Sparkles, Trash2, Type, Upload, UsersRound, Volume2, WandSparkles, ZoomIn, ZoomOut, type LucideIcon } from "lucide-react";
+import { AlignCenter, AlignLeft, AlignRight, AppWindow, Brush, CalendarDays, Check, CircleDot, Crop, Eye, Image as ImageIcon, Laptop, Layers, LayoutTemplate, Maximize2, Move, MousePointer2, Palette, PanelLeftClose, PanelLeftOpen, RotateCcw, Share2, Shield, SlidersHorizontal, Sparkles, Trash2, Type, Upload, UsersRound, Volume2, WandSparkles, X, ZoomIn, ZoomOut, type LucideIcon } from "lucide-react";
 import { PortfolioPanel } from "@/components/customization/PortfolioPanel";
 import { WidgetsPanel } from "@/components/customization/WidgetsPanel";
 import { useEffect, useRef, useState, type CSSProperties, type ElementType } from "react";
+import { EffectColors } from "./EffectColors";
 import { ImageCropModal } from "@/components/customization/ImageCropModal";
 import { AudioCropModal } from "@/components/customization/AudioCropModal";
 import { PlaylistEditor } from "@/components/customization/PlaylistEditor";
+import { DraftPreviewBoundary, useDraftPreview } from "@/lib/draft-preview";
+import { ProfilePreviewButton } from "@/components/profile/ProfilePreviewButton";
 import { ProfileRenderer } from "@/components/profile/ProfileRenderer";
 import { BackgroundEffectLayer } from "@/components/profile/BackgroundEffectLayer";
 import { BACKGROUND_EFFECTS } from "@/lib/background-effects";
@@ -51,24 +55,48 @@ const cropSpec: Record<CropKey, { title: string; aspect: number; width: number; 
 };
 
 export function CustomizationWorkspace() {
+  return <DraftPreviewBoundary><CustomizationContent /></DraftPreviewBoundary>;
+}
+
+function CustomizationContent() {
+  const { active: previewTabOpen } = useDraftPreview();
   const t = useT();
   const { config, updateConfig, resetConfig, saveProfile, saveState, profileReady } = useProfile();
   const { enabled } = useFeatureFlags();
   const [tab, setTab] = useState<Tab>("assets");
   const [crop, setCrop] = useState<{ key: CropKey; asset: ProfileAsset } | null>(null);
   const [audioCrop, setAudioCrop] = useState<ProfileAsset | null>(null);
+  const [layoutViewport, setLayoutViewport] = useState<LayoutViewport>("desktop");
   const [manualMove, setManualMove] = useState(false);
   const [fullPreview, setFullPreview] = useState(false);
   const [controlsCollapsed, setControlsCollapsed] = useState(false);
   const shareCopy = sharePageCopy(config);
   const tabIcon = config.assets.favicon?.url || config.assets.avatar?.url || "";
-  const setSettings = (patch: Partial<typeof config.settings>) => updateConfig((current) => ({ ...current, settings: { ...current.settings, ...patch } }));
+  const setSettings = (patch: Partial<typeof config.settings>) => updateConfig((current) => {
+    const { profileFrameWidth, profileFrameHeight, profileFrameScale, profileFrameX, profileFrameY, cardAlign, ...rest } = patch;
+    const hasFrameChange = [profileFrameWidth, profileFrameHeight, profileFrameScale, profileFrameX, profileFrameY, cardAlign].some((value) => value !== undefined);
+    if (!hasFrameChange) return { ...current, settings: { ...current.settings, ...patch } };
+    const frame = elementBox(current.settings, "frame", layoutViewport);
+    const next = { ...frame,
+      ...(profileFrameWidth !== undefined ? { width: profileFrameWidth } : {}),
+      ...(profileFrameHeight !== undefined ? { height: profileFrameHeight } : {}),
+      ...(profileFrameScale !== undefined ? { width: Math.min(1040, (layoutViewport === "mobile" ? 358 : 880) * profileFrameScale / 100) } : {}),
+      ...(profileFrameX !== undefined ? { x: profileFrameX * 2 } : {}),
+      ...(profileFrameY !== undefined ? { y: Math.max(0, profileFrameY * 4) } : {}),
+      ...(cardAlign !== undefined ? { x: cardAlign === "left" ? -100 : cardAlign === "right" ? 100 : 0 } : {}),
+    };
+    return { ...current, settings: { ...current.settings, ...rest, elementLayouts: updateElementLayout(current.settings, layoutViewport, "frame", next) } };
+  });
   const setProfile = (patch: Partial<typeof config.profile>) => updateConfig((current) => ({ ...current, profile: { ...current.profile, ...patch } }));
-  const setAsset = (key: keyof typeof config.assets, asset: ProfileAsset | boolean | number | string) => updateConfig((current) => ({ ...current, assets: { ...current.assets, [key]: asset } }));
+  const uploadRevision = useRef<Record<string, number>>({});
+  const setAsset = (key: keyof typeof config.assets, asset: ProfileAsset | boolean | number | string) => { uploadRevision.current[key === "background" || key === "backgroundVideo" ? "backgroundMedia" : key] = (uploadRevision.current[key === "background" || key === "backgroundVideo" ? "backgroundMedia" : key] || 0) + 1; updateConfig((current) => ({ ...current, assets: { ...current.assets, [key]: asset } })); };
+  const currentFrame = elementBox(config.settings, "frame", layoutViewport);
+  const layoutConfig = { ...config, settings: { ...config.settings, profileFrameWidth: currentFrame.width || 358, profileFrameHeight: currentFrame.height, profileFrameX: currentFrame.x / 2, profileFrameY: currentFrame.y / 4, profileFrameScale: Math.round((currentFrame.width || 358) / (layoutViewport === "mobile" ? 358 : 880) * 100), cardAlign: (currentFrame.x < 0 ? "left" : currentFrame.x > 0 ? "right" : "center") as SocialAlign } };
   const openManualMove = () => { setManualMove(true); setFullPreview(true); };
-  const resetFramePosition = () => setSettings({ profileFrameScale: 100, profileFrameWidth: 430, profileFrameHeight: 0, profileFrameX: 0, profileFrameY: 0 });
-  const adjustFrameScale = (delta: number) => setSettings({ profileFrameScale: Math.min(150, Math.max(50, (config.settings.profileFrameScale ?? 100) + delta)) });
+  const resetFramePosition = () => setSettings({ elementLayouts: updateElementLayout(config.settings, layoutViewport, "frame", { x: 0, y: 0, width: layoutViewport === "desktop" ? 880 : 0, height: 0 }) });
+  const adjustFrameScale = (delta: number) => { const frame = elementBox(config.settings, "frame", layoutViewport); setSettings({ elementLayouts: updateElementLayout(config.settings, layoutViewport, "frame", { ...frame, width: Math.min(1040, Math.max(260, (frame.width || 358) + delta * 4)) }) }); };
   const uploadAsset = async (key: keyof typeof config.assets, file: File) => {
+    const revision = uploadRevision.current[key === "background" || key === "backgroundVideo" ? "backgroundMedia" : key] = (uploadRevision.current[key === "background" || key === "backgroundVideo" ? "backgroundMedia" : key] || 0) + 1;
     const maxBytes = key === "backgroundVideo" || key === "backgroundEffectVideo" ? 110_000_000 : key === "audio" ? 40_000_000 : key === "clickSound" ? 2_000_000 : key === "customFont" ? 5_000_000 : key === "cursor" ? 5_000_000 : 25_000_000;
     const type = mimeTypeForFile(file).toLowerCase();
     const imageKeys = new Set(["avatar", "background", "banner", "ogImage", "favicon"]);
@@ -83,11 +111,13 @@ export function CustomizationWorkspace() {
         if (prepared.url?.startsWith("data:")) uploadFile = await dataUrlToFile(prepared.url, "cursor.png", "image/png");
       }
       const uploaded = await uploadProfileAsset(String(key), uploadFile);
+      if (uploadRevision.current[key === "background" || key === "backgroundVideo" ? "backgroundMedia" : key] !== revision) return;
       updateConfig((current) => ({
         ...current,
         assets: {
           ...current.assets,
           [key]: uploaded,
+          ...(key === "backgroundVideo" ? { background: { url: null, remove: true }, audioSource: current.assets.audioSource === "standalone" || current.assets.audioSource === "tracks" ? current.assets.audioSource : "video" } : key === "background" ? { backgroundVideo: { url: null, remove: true }, audioSource: current.assets.tracks?.length ? "tracks" : "standalone", audioEnabled: current.assets.audioEnabled && Boolean(current.assets.tracks?.length || current.assets.audio?.url) } : {}),
           ...(key === "audio" ? { audioSource: "standalone", tracks: [] } : {}),
         },
       }));
@@ -97,16 +127,20 @@ export function CustomizationWorkspace() {
     }
   };  const tabLabel: Record<Tab, string> = { assets: t("customize.tabAssets"), layout: t("customize.tabLayout"), widgets: t("customize.tabWidgets"), portfolio: t("customize.tabPortfolio"), general: t("customize.tabGeneral"), colors: t("customize.tabColors"), effects: t("customize.tabEffects"), sharing: t("customize.sharingTitle") };
   const visibleTabRows = tabRows.map((row) => row.filter(({ id }) => enabled(id === "assets" ? "customize.assets" : id === "layout" ? "customize.layout" : id === "widgets" ? "customize.widgets" : id === "portfolio" ? "customize.portfolio" : id === "effects" ? "customize.effects" : id === "sharing" ? "customize.sharing" : "customize.general"))).filter((row) => row.length);
-  return <PreviewPlayerProvider><main className="mx-auto min-h-screen max-w-[1500px] px-5 py-8 sm:px-8 sm:py-10 xl:px-10"><PageHeader eyebrow={t("customize.eyebrow")} title={t("customize.title")} description={t("customize.description")} action={<div className="flex flex-wrap justify-end gap-2"><Button variant="ghost" onClick={() => setControlsCollapsed((collapsed) => !collapsed)} >{controlsCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}<span className="hidden lg:inline">{controlsCollapsed ? t("customize.showControls", undefined, "Show controls") : t("customize.hideControls", undefined, "Hide controls")}</span></Button><Button variant="ghost" onClick={resetConfig}><RotateCcw size={15} />{t("common.reset")}</Button><Button variant="accent" onClick={() => void saveProfile()} disabled={saveState === "saving" || !profileReady}>{saveState === "saving" ? t("common.saving") : saveState === "saved" ? <><Check size={15} />{t("common.savedCheck")}</> : <><Check size={15} />{t("common.save")}</>}</Button></div>} /><div className={`grid items-start gap-6 ${controlsCollapsed ? "md:grid-cols-[56px_minmax(0,1fr)]" : "md:grid-cols-[minmax(0,.9fr)_minmax(0,1.1fr)]"}`}><section className={`min-w-0 rounded-2xl border border-white/[.07] bg-[#0d0d12] ${controlsCollapsed ? "p-2 md:w-14" : "p-4 sm:p-5 md:max-h-[calc(100vh-7rem)] md:overflow-y-auto"}`}>{controlsCollapsed ? <div className="flex min-h-[120px] flex-col items-center justify-center gap-3"><button type="button" aria-label={t("customize.showControls", undefined, "Show controls")} title={t("customize.showControls", undefined, "Show controls")} onClick={() => setControlsCollapsed(false)} className="flex h-10 w-10 items-center justify-center rounded-xl text-zinc-400 transition hover:bg-white/[.08] hover:text-white"><PanelLeftOpen size={17} /></button><span className="sr-only">{t("customize.showControls", undefined, "Show controls")}</span></div> : <div className="min-w-0"><div className="mb-6 space-y-1 rounded-2xl bg-white/[.035] p-1.5">{visibleTabRows.map((row, index) => <div key={index} className={`grid gap-1 ${index === 0 ? "grid-cols-4" : "grid-cols-4"}`}>{row.map(({ id, icon: Icon }) => <button key={id} type="button" onClick={() => setTab(id)} className={`flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-xs font-medium transition ${tab === id ? "bg-white/[.12] text-white shadow-sm" : "text-zinc-500 hover:bg-white/[.04] hover:text-zinc-200"}`}><Icon size={14} className="shrink-0" /><span className="truncate">{tabLabel[id]}</span></button>)}</div>)}</div><motion.div key={tab} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: .2 }}>{tab === "assets" && <AssetsPanel config={config} setAsset={setAsset} onUpload={uploadAsset} onCrop={setCrop} onAudioCrop={setAudioCrop} onTracks={(tracks) => updateConfig((current) => ({ ...current, assets: { ...current.assets, ...syncPlaylist(tracks), audioSource: tracks.length ? "tracks" : current.assets.audio?.url ? "standalone" : "video", audioEnabled: tracks.length ? false : current.assets.audioEnabled } }))} />}{tab === "layout" && <LayoutsPanel config={config} setSettings={setSettings} onManualMove={openManualMove} onResetFrame={resetFramePosition} />}{tab === "widgets" && <WidgetsPanel />}{tab === "portfolio" && <PortfolioPanel />}{tab === "general" && <GeneralPanel config={config} setSettings={setSettings} setProfile={setProfile} />}{tab === "sharing" && <SharingAppearance config={config} setSettings={setSettings} setAsset={(key, asset) => setAsset(key, asset)} onUpload={uploadAsset} onCrop={setCrop} />}{tab === "colors" && <ColorsPanel config={config} setSettings={setSettings} />}{tab === "effects" && <EffectsPanel config={config} setSettings={setSettings} setAsset={setAsset} onUpload={uploadAsset} />}</motion.div></div>}</section><section className="min-w-0 md:sticky md:top-4 md:self-start"><div><div className="mb-3 flex items-center justify-between gap-3 px-1"><div className="flex items-center gap-2 text-sm font-medium"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#e11d48]/10 text-[#fecdd3]"><Laptop size={14} /></span>{t("customize.preview")}</div><div className="flex items-center gap-2"><span className="hidden items-center gap-2 text-[11px] text-zinc-600 sm:flex"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{t("customize.instant")}</span><Button variant="ghost" className="h-8 min-h-0 px-2 text-[11px]" onClick={() => setFullPreview(true)}><Maximize2 size={13} />{t("customize.fullView", undefined, "Full view")}</Button></div></div><div className="overflow-hidden rounded-2xl border border-white/[.1] bg-[#08080d] shadow-2xl shadow-black/30"><div className="flex h-9 items-center gap-1.5 border-b border-white/[.06] bg-white/[.025] px-3"><span className="h-2.5 w-2.5 rounded-full bg-[#ff6f70]/70" /><span className="h-2.5 w-2.5 rounded-full bg-[#ffcb70]/70" /><span className="h-2.5 w-2.5 rounded-full bg-[#70d69a]/70" /><div className="mx-auto flex h-5 max-w-[260px] flex-1 items-center justify-center gap-1.5 rounded-md bg-black/20 px-2 text-[9px] text-zinc-600">{tabIcon ? <img src={tabIcon} alt="" className="h-3 w-3 rounded-[3px] object-cover" /> : null}<span className="truncate">{shareCopy.title}</span></div></div><div className="h-[580px] sm:h-[650px]" dir="ltr"><ProfileRenderer config={config} preview manualPositioning={manualMove} onFramePositionChange={setSettings} /></div></div></div></section></div>{saveState === "saved" && <div role="status" className="fixed bottom-6 end-6 z-40 rounded-xl border border-emerald-400/20 bg-[#12191a] px-4 py-3 text-sm text-emerald-300 shadow-xl">{t("customize.savedToast")}</div>}
+  return <PreviewPlayerProvider><main className="mx-auto min-h-screen max-w-[1500px] px-5 py-8 sm:px-8 sm:py-10 xl:px-10"><PageHeader eyebrow={t("customize.eyebrow")} title={t("customize.title")} description={t("customize.description")} action={<div className="flex flex-wrap justify-end gap-2"><Button variant="ghost" onClick={() => setControlsCollapsed((collapsed) => !collapsed)} >{controlsCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}<span className="hidden lg:inline">{controlsCollapsed ? t("customize.showControls", undefined, "Show controls") : t("customize.hideControls", undefined, "Hide controls")}</span></Button><Button variant="ghost" onClick={resetConfig}><RotateCcw size={15} />{t("common.reset")}</Button><Button variant="accent" onClick={() => void saveProfile()} disabled={saveState === "saving" || !profileReady}>{saveState === "saving" ? t("common.saving") : saveState === "saved" ? <><Check size={15} />{t("common.savedCheck")}</> : <><Check size={15} />{t("common.save")}</>}</Button></div>} /><div className={`grid items-start gap-6 ${controlsCollapsed ? "md:grid-cols-[56px_minmax(0,1fr)]" : "md:grid-cols-[minmax(0,.9fr)_minmax(0,1.1fr)]"}`}><section className={`min-w-0 rounded-2xl border border-white/[.07] bg-[#0d0d12] ${controlsCollapsed ? "p-2 md:w-14" : "p-4 sm:p-5 md:max-h-[calc(100vh-7rem)] md:overflow-y-auto"}`}>{controlsCollapsed ? <div className="flex min-h-[120px] flex-col items-center justify-center gap-3"><button type="button" aria-label={t("customize.showControls", undefined, "Show controls")} title={t("customize.showControls", undefined, "Show controls")} onClick={() => setControlsCollapsed(false)} className="flex h-10 w-10 items-center justify-center rounded-xl text-zinc-400 transition hover:bg-white/[.08] hover:text-white"><PanelLeftOpen size={17} /></button><span className="sr-only">{t("customize.showControls", undefined, "Show controls")}</span></div> : <div className="min-w-0"><div className="mb-6 space-y-1 rounded-2xl bg-white/[.035] p-1.5">{visibleTabRows.map((row, index) => <div key={index} className={`grid gap-1 ${index === 0 ? "grid-cols-4" : "grid-cols-4"}`}>{row.map(({ id, icon: Icon }) => <button key={id} type="button" onClick={() => setTab(id)} className={`flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 py-2.5 text-xs font-medium transition ${tab === id ? "bg-white/[.12] text-white shadow-sm" : "text-zinc-500 hover:bg-white/[.04] hover:text-zinc-200"}`}><Icon size={14} className="shrink-0" /><span className="truncate">{tabLabel[id]}</span></button>)}</div>)}</div><motion.div key={tab} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: .2 }}>{tab === "assets" && <AssetsPanel config={config} setAsset={setAsset} onUpload={uploadAsset} onCrop={setCrop} onAudioCrop={setAudioCrop} onTracks={(tracks) => updateConfig((current) => ({ ...current, assets: { ...current.assets, ...syncPlaylist(tracks), audioSource: tracks.length ? "tracks" : current.assets.audio?.url ? "standalone" : "video", audioEnabled: tracks.length ? false : current.assets.audioEnabled } }))} />}{tab === "layout" && <LayoutsPanel config={layoutConfig} setSettings={setSettings} onManualMove={openManualMove} onResetFrame={resetFramePosition} />}{tab === "widgets" && <WidgetsPanel />}{tab === "portfolio" && <PortfolioPanel />}{tab === "general" && <GeneralPanel config={config} setSettings={setSettings} setProfile={setProfile} />}{tab === "sharing" && <SharingAppearance config={config} setSettings={setSettings} setAsset={(key, asset) => setAsset(key, asset)} onUpload={uploadAsset} onCrop={setCrop} />}{tab === "colors" && <ColorsPanel config={config} setSettings={setSettings} />}{tab === "effects" && <><EffectsPanel config={config} setSettings={setSettings} setAsset={setAsset} onUpload={uploadAsset} /><EffectColors /></>}</motion.div></div>}</section><section className="min-w-0 md:sticky md:top-4 md:self-start"><div><div className="mb-3 flex items-center justify-between gap-3 px-1"><div className="flex items-center gap-2 text-sm font-medium"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#e11d48]/10 text-[#fecdd3]"><Laptop size={14} /></span>{t("customize.preview")}</div><div className="flex items-center gap-2"><span className="hidden items-center gap-2 text-[11px] text-zinc-600 sm:flex"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />{t("customize.instant")}</span><ProfilePreviewButton /></div></div><div className="overflow-hidden rounded-2xl border border-white/[.1] bg-[#08080d] shadow-2xl shadow-black/30"><div className="flex h-9 items-center gap-1.5 border-b border-white/[.06] bg-white/[.025] px-3"><span className="h-2.5 w-2.5 rounded-full bg-[#ff6f70]/70" /><span className="h-2.5 w-2.5 rounded-full bg-[#ffcb70]/70" /><span className="h-2.5 w-2.5 rounded-full bg-[#70d69a]/70" /><div className="mx-auto flex h-5 max-w-[260px] flex-1 items-center justify-center gap-1.5 rounded-md bg-black/20 px-2 text-[9px] text-zinc-600">{tabIcon ? <img src={tabIcon} alt="" className="h-3 w-3 rounded-[3px] object-cover" /> : null}<span className="truncate">{shareCopy.title}</span></div></div><div className="h-[580px] overflow-auto sm:h-[650px]" dir="ltr">{previewTabOpen && !fullPreview ? <div className="flex h-full items-center justify-center p-6 text-sm text-zinc-400">Your live preview is open in its own tab.</div> : !fullPreview && <ProfileRenderer config={config} preview fitViewport layoutViewport={layoutViewport} manualPositioning={manualMove} onLayoutChange={setSettings} />}</div></div></div></section></div>{saveState === "saved" && <div role="status" className="fixed bottom-6 end-6 z-40 rounded-xl border border-emerald-400/20 bg-[#12191a] px-4 py-3 text-sm text-emerald-300 shadow-xl">{t("customize.savedToast")}</div>}
     {fullPreview && <div className="fixed inset-0 z-[100] flex flex-col bg-[#07070a]">
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/[.06] bg-[#0b0b10]/90 px-3 sm:px-4">
         <div className="flex items-center gap-2 text-sm font-medium text-white"><Maximize2 size={15} className="text-[#fecdd3]" />{t("customize.fullView", undefined, "Full view")}</div>
-        <button type="button" aria-label="Close full view" onClick={() => setFullPreview(false)} className="flex h-8 w-8 items-center justify-center rounded-lg text-lg leading-none text-zinc-400 transition hover:bg-white/[.06] hover:text-white">×</button>
+        <button type="button" aria-label="Close full view" onClick={() => { setFullPreview(false); setManualMove(false); }} className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 hover:bg-white/[.06] hover:text-white"><X size={18} aria-hidden="true" /></button>
       </div>
-      <div className="relative min-h-0 flex-1" dir="ltr">
-        <ProfileRenderer config={config} preview fitViewport manualPositioning={manualMove} onFramePositionChange={setSettings} />
-        {manualMove ? <div className="absolute bottom-5 right-5 z-20 flex items-center gap-2 rounded-2xl border border-white/[.1] bg-[#0b0b10]/90 p-2 shadow-2xl backdrop-blur-sm"><Button variant="ghost" className="h-9 min-h-0 px-3 text-xs" onClick={resetFramePosition}><RotateCcw size={13} />{t("common.reset")}</Button><Button variant="ghost" aria-label="Zoom out" className="h-9 min-h-0 w-9 min-w-0 px-0" onClick={() => adjustFrameScale(-10)} disabled={(config.settings.profileFrameScale ?? 100) <= 50}><ZoomOut size={15} /></Button><span className="min-w-12 text-center font-mono text-xs text-zinc-300">{config.settings.profileFrameScale ?? 100}%</span><Button variant="ghost" aria-label="Zoom in" className="h-9 min-h-0 w-9 min-w-0 px-0" onClick={() => adjustFrameScale(10)} disabled={(config.settings.profileFrameScale ?? 100) >= 150}><ZoomIn size={15} /></Button><Button variant="accent" className="h-9 min-h-0 px-4 text-xs" onClick={() => setManualMove(false)}>{t("customize.exitMove", undefined, "Exit move mode")}</Button></div> : null}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-white/10 p-3">
+        {(["desktop", "mobile"] as const).map((viewport) => <Button key={viewport} variant={layoutViewport === viewport ? "accent" : "ghost"} aria-pressed={layoutViewport === viewport} onClick={() => setLayoutViewport(viewport)}>{viewport === "desktop" ? "Desktop layout" : "Mobile layout"}</Button>)}
+        <span className="text-xs text-zinc-400">{manualMove ? "Select frame, Discord, a widget or audio using its handle. Drag to move; use the corner to resize. Arrow keys also work." : "Layouts save separately for desktop and mobile."}</span>
       </div>
+      <div className="relative min-h-0 flex-1 overflow-auto" dir="ltr">
+        <div className="mx-auto h-full" style={{ width: layoutViewport === "mobile" ? "min(100%, 390px)" : "100%" }}><ProfileRenderer config={config} preview fitViewport layoutViewport={layoutViewport} manualPositioning={manualMove} onLayoutChange={setSettings} /></div>
+        </div>
+      {manualMove ? <div className="z-20 flex shrink-0 flex-wrap items-center justify-center gap-2 rounded-2xl border border-white/[.1] bg-[#0b0b10]/90 p-2 shadow-2xl backdrop-blur-sm"><Button variant="ghost" className="h-9 min-h-0 px-3 text-xs" onClick={resetFramePosition}><RotateCcw size={13} />{t("common.reset")}</Button><Button variant="ghost" aria-label="Zoom out" className="h-9 min-h-0 w-9 min-w-0 px-0" onClick={() => adjustFrameScale(-10)} ><ZoomOut size={15} /></Button><span className="min-w-12 text-center font-mono text-xs text-zinc-300">{currentFrame.width ? `${currentFrame.width}px` : "Auto"}</span><Button variant="ghost" aria-label="Zoom in" className="h-9 min-h-0 w-9 min-w-0 px-0" onClick={() => adjustFrameScale(10)} ><ZoomIn size={15} /></Button><Button variant="accent" className="h-9 min-h-0 px-4 text-xs" onClick={() => setManualMove(false)}>{t("customize.exitMove", undefined, "Exit move mode")}</Button></div> : null}
     </div>}
     <AudioCropModal
       open={Boolean(audioCrop)}
@@ -172,8 +206,10 @@ export function ConstellationProfileControls({
   const [crop, setCrop] = useState<{ key: CropKey; asset: ProfileAsset } | null>(null);
   const setSettings = (patch: Partial<typeof config.settings>) => updateConfig((current) => ({ ...current, settings: { ...current.settings, ...patch } }));
   const setProfile = (patch: Partial<typeof config.profile>) => updateConfig((current) => ({ ...current, profile: { ...current.profile, ...patch } }));
-  const setAsset = (key: keyof typeof config.assets, asset: ProfileAsset | boolean | number | string) => updateConfig((current) => ({ ...current, assets: { ...current.assets, [key]: asset } }));
+  const uploadRevision = useRef<Record<string, number>>({});
+  const setAsset = (key: keyof typeof config.assets, asset: ProfileAsset | boolean | number | string) => { uploadRevision.current[key === "background" || key === "backgroundVideo" ? "backgroundMedia" : key] = (uploadRevision.current[key === "background" || key === "backgroundVideo" ? "backgroundMedia" : key] || 0) + 1; updateConfig((current) => ({ ...current, assets: { ...current.assets, [key]: asset } })); };
   const uploadAsset = async (key: keyof typeof config.assets, file: File) => {
+    const revision = uploadRevision.current[key === "background" || key === "backgroundVideo" ? "backgroundMedia" : key] = (uploadRevision.current[key === "background" || key === "backgroundVideo" ? "backgroundMedia" : key] || 0) + 1;
     const maxBytes = key === "backgroundVideo" || key === "backgroundEffectVideo" ? 110_000_000 : key === "audio" ? 40_000_000 : key === "clickSound" ? 2_000_000 : key === "customFont" ? 5_000_000 : key === "cursor" ? 5_000_000 : 25_000_000;
     const type = mimeTypeForFile(file).toLowerCase();
     const imageKeys = new Set(["avatar", "banner", "ogImage", "favicon"]);
@@ -183,6 +219,7 @@ export function ConstellationProfileControls({
     try {
       const source = await assetFromFile(file);
       const uploaded = await uploadProfileAsset(String(key), file);
+      if (uploadRevision.current[key === "background" || key === "backgroundVideo" ? "backgroundMedia" : key] !== revision) return;
       setAsset(key, uploaded);
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "The file could not be uploaded. Please try again.");
@@ -206,7 +243,7 @@ export function ConstellationProfileControls({
       {tab === "colors" && <ColorsPanel config={config} setSettings={setSettings} />}
       {tab === "effects" && <EffectsPanel config={config} setSettings={setSettings} setAsset={setAsset} onUpload={uploadAsset} backgroundEffectValue={backgroundEffect} onBackgroundEffectChange={onBackgroundEffectChange} />}
     </motion.div>
-    <div className="mt-5 flex flex-wrap justify-end gap-2"><Button variant="ghost" onClick={resetConfig}><RotateCcw size={14} />Reset design draft</Button><Button variant="accent" disabled={!profileReady || saveState === "saving"} onClick={() => void saveProfile()}><Check size={14} />{saveState === "saving" ? "Saving…" : saveState === "saved" ? "Design saved" : "Save design"}</Button></div>
+    <div className="mt-5 flex flex-wrap justify-end gap-2"><Button variant="ghost" onClick={resetConfig}><RotateCcw size={14} />Reset design draft</Button><Button variant="accent" disabled={!profileReady || saveState === "saving"} onClick={() => void saveProfile()}><Check size={14} />{saveState === "saving" ? "Savingâ€¦" : saveState === "saved" ? "Design saved" : "Save design"}</Button></div>
     <ImageCropModal open={Boolean(crop)} title={crop ? cropSpec[crop.key].title : "Crop image"} src={crop?.asset.url || ""} aspect={crop ? cropSpec[crop.key].aspect : 1} outputWidth={crop ? cropSpec[crop.key].width : 512} outputHeight={crop ? cropSpec[crop.key].height : 512} mime={crop ? cropSpec[crop.key].mime : "image/jpeg"} onCancel={() => setCrop(null)} onApply={async (url) => { const current = crop; if (!current) return; try { const spec = cropSpec[current.key]; setAsset(current.key, await uploadProfileAsset(current.key, await dataUrlToFile(url, "cropped-" + current.key + ".jpg", spec.mime))); } catch (error) { window.alert(error instanceof Error ? error.message : "The cropped image could not be uploaded."); } finally { setCrop(null); } }} />
   </div>;
 }
@@ -244,18 +281,11 @@ function BackgroundAssetRow({ config, setAsset, onUpload }: { config: ReturnType
     const nextIsVideo = type.startsWith("video/") || /\.(mp4|webm|mov)$/i.test(file.name);
     if (!nextIsVideo && !type.startsWith("image/")) { window.alert("Choose an image, GIF, MP4, WebM, or MOV file."); return; }
     await onUpload(nextIsVideo ? "backgroundVideo" : "background", file);
-    if (nextIsVideo) {
-      setAsset("background", { url: null, remove: true });
-      setAsset("audioSource", "video");
-    } else {
-      setAsset("backgroundVideo", { url: null, remove: true });
-      setAsset("audioEnabled", false);
-      setAsset("audioSource", config.assets.tracks?.length ? "tracks" : config.assets.audio?.url ? "standalone" : "video");
-    }
+
   };
   const removeBackground = () => {
-    if (video?.url) setAsset("backgroundVideo", { url: null, remove: true });
-    if (image?.url) setAsset("background", { url: null, remove: true });
+    setAsset("backgroundVideo", { url: null, remove: true });
+    setAsset("background", { url: null, remove: true });
     setAsset("audioEnabled", false);
     setAsset("audioSource", config.assets.tracks?.length ? "tracks" : config.assets.audio?.url ? "standalone" : "video");
   };
@@ -316,16 +346,16 @@ function LayoutsPanel({ config, setSettings, onManualMove, onResetFrame }: { con
         </div>
         <button type="button" onClick={onManualMove} className="flex w-full items-center gap-4 rounded-2xl border border-white/[.07] bg-white/[.035] p-4 text-left transition hover:border-[#e11d48]/40 hover:bg-[#e11d48]/[.08]">
         <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#e11d48]/10 text-[#fecdd3]"><Move size={24} /></span>
-        <span className="min-w-0 flex-1"><span className="block text-base font-medium text-white">{t("customize.manualMove", undefined, "Move manually")}</span><span className="mt-1 block text-xs text-zinc-500">{t("customize.manualMoveHint", undefined, "Drag and resize the profile frame yourself.")}</span></span>
+        <span className="min-w-0 flex-1"><span className="block text-base font-medium text-white">{t("customize.manualMove", undefined, "Move manually")}</span><span className="mt-1 block text-xs text-zinc-500">{t("customize.manualMoveHint", undefined, "Move and resize the frame, Discord status and audio independently.")}</span></span>
         <span className="text-2xl text-zinc-400" aria-hidden="true">&gt;</span>
       </button>
       <div className="space-y-5 rounded-2xl border border-white/[.07] bg-white/[.02] p-4">
           <p className="text-xs leading-5 text-zinc-500">{t("customize.frameHint")}</p>
           <RangeControl label={t("customize.frameSize")} value={config.settings.profileFrameScale ?? 100} min={50} max={150} suffix="%" onChange={(value) => setSettings({ profileFrameScale: value })} onReset={() => setSettings({ profileFrameScale: 100 })} />
-          <RangeControl label={t("customize.frameWidth", undefined, "Frame width")} value={config.settings.profileFrameWidth ?? 430} min={260} max={800} suffix="px" onChange={(value) => setSettings({ profileFrameWidth: value })} onReset={() => setSettings({ profileFrameWidth: 430 })} />
+          <RangeControl label={t("customize.frameWidth", undefined, "Frame width")} value={config.settings.profileFrameWidth ?? 430} min={260} max={1040} suffix="px" onChange={(value) => setSettings({ profileFrameWidth: value })} onReset={() => setSettings({ profileFrameWidth: 430 })} />
           <RangeControl label={t("customize.frameHeight", undefined, "Frame height")} value={config.settings.profileFrameHeight || 420} min={200} max={1000} suffix="px" onChange={(value) => setSettings({ profileFrameHeight: value })} onReset={() => setSettings({ profileFrameHeight: 0 })} />
           <RangeControl label={t("customize.frameHorizontal")} value={config.settings.profileFrameX ?? 0} min={-45} max={45} suffix="%" onChange={(value) => setSettings({ profileFrameX: value })} onReset={() => setSettings({ profileFrameX: 0 })} />
-          <RangeControl label={t("customize.frameVertical")} value={config.settings.profileFrameY ?? 0} min={-45} max={45} suffix="%" onChange={(value) => setSettings({ profileFrameY: value })} onReset={() => setSettings({ profileFrameY: 0 })} />
+          <RangeControl label={t("customize.frameVertical")} value={config.settings.profileFrameY ?? 0} min={0} max={45} suffix="%" onChange={(value) => setSettings({ profileFrameY: value })} onReset={() => setSettings({ profileFrameY: 0 })} />
           <div className="flex justify-end"><Button variant="ghost" className="h-9 min-h-0 px-3 text-xs" onClick={onResetFrame}><RotateCcw size={13} />{t("common.reset")}</Button></div>
         </div>
         <RangeControl label={t("customize.borderWidth")} value={config.settings.borderWidth ?? 1} min={0} max={8} suffix="px" onChange={(value) => setSettings({ borderWidth: value })} onReset={() => setSettings({ borderWidth: 1 })} />

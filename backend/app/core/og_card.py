@@ -47,6 +47,29 @@ def share_flag(settings: dict[str, Any], key: str, default: bool = True) -> bool
 
 
 async def render_og_png(bits: dict[str, Any]) -> bytes:
+    import base64
+    import hashlib
+    import json
+    from app.db.dragonfly import get_dragonfly
+    key = "profile-og:v2:" + hashlib.sha256(json.dumps(bits, sort_keys=True, default=str).encode()).hexdigest()
+    redis = None
+    try:
+        redis = get_dragonfly()
+        cached = await redis.get(key)
+        if cached:
+            return base64.b64decode(cached)
+    except Exception:
+        pass
+    result = await _render_og_png(bits)
+    if redis:
+        try:
+            await redis.set(key, base64.b64encode(result).decode(), ex=3600)
+        except Exception:
+            pass
+    return result
+
+
+async def _render_og_png(bits: dict[str, Any]) -> bytes:
     settings = bits.get("settings") if isinstance(bits.get("settings"), dict) else {}
     identity = bits.get("identity") if isinstance(bits.get("identity"), dict) else {}
     username = str(bits.get("username") or "user")

@@ -2,15 +2,16 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, BadgeCheck, BookOpen, Check, ChevronRight, CircleHelp, Copy, Inbox, LayoutDashboard, Link2, LockKeyhole, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Palette, Search, Settings, Share2, ShieldCheck, Sparkles, Trophy, UsersRound, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { BarChart3, BadgeCheck, BookOpen, Check, ChevronRight, CircleHelp, Copy, ExternalLink, LayoutDashboard, Link2, LockKeyhole, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Palette, Search, Settings, Share2, ShieldCheck, Sparkles, Trophy, UsersRound, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LanguageSelect } from "@/components/dashboard/LanguageSelect";
 import { RuntimeErrorBoundary } from "@/components/dashboard/RuntimeErrorBoundary";
 import { UsernameClaimGate } from "@/components/onboarding/UsernameClaimGate";
 import { useAuth } from "@/lib/auth-store";
 import { useI18n } from "@/lib/i18n";
 import { useProfile } from "@/lib/profile-store";
+import { publicProfileUrl } from "@/lib/share";
 import { useFeatureFlags } from "@/lib/feature-flags";
 
 function isActive(pathname: string, href: string) {
@@ -32,12 +33,17 @@ function NavLink({ href, label, icon: Icon, close }: DashboardNavItem & { close:
 }
 
 function SidebarContent({ close, onToggleDesktop }: { close: () => void; onToggleDesktop?: () => void }) {
-  const { config } = useProfile();
+  const { config, savedConfig, profileReady } = useProfile();
   const { logout, user } = useAuth();
   const { t } = useI18n();
   const { enabled } = useFeatureFlags();
   const router = useRouter();
   const pathname = usePathname();
+  const premiumView = useSearchParams().get("view") || "general";
+  const premiumActive = isActive(pathname, "/premium");
+  const [premiumOpen, setPremiumOpen] = useState(premiumActive);
+  const myPage = profileReady && user?.username && savedConfig.profile.username === user.username ? publicProfileUrl(user.username) : null;
+  const premiumItems = [{ label: "General", view: "general" }, { label: "Layout Settings", view: "layout" }, { label: "Profile Metadata", view: "metadata" }];
   const [accountOpen, setAccountOpen] = useState(true);
   const [customizeOpen, setCustomizeOpen] = useState(true);
   const [query, setQuery] = useState("");
@@ -45,7 +51,6 @@ function SidebarContent({ close, onToggleDesktop }: { close: () => void; onToggl
   const [copiedAccountId, setCopiedAccountId] = useState(false);
   const initials = config.profile.displayName.trim().slice(0, 1).toUpperCase() || "U";
   const avatarUrl = config.assets.avatar.url;
-  const publicOrigin = process.env.NEXT_PUBLIC_AUTH_ORIGIN || "http://127.0.0.1:8000";
   const copyAccountId = async () => {
     if (!user?.accountId) return;
     try {
@@ -61,7 +66,6 @@ function SidebarContent({ close, onToggleDesktop }: { close: () => void; onToggl
       enabled("nav.badges") && { label: t("nav.badges"), href: "/badges", icon: BadgeCheck },
       enabled("nav.settings") && { label: t("nav.settings"), href: "/settings", icon: Settings },
       enabled("nav.security") && { label: t("nav.security", undefined, "Security"), href: "/security", icon: LockKeyhole },
-      enabled("nav.me") && { label: t("nav.me", undefined, "Moderation"), href: "/me", icon: Inbox },
     ].filter((item): item is DashboardNavItem => Boolean(item)) },
     { label: t("nav.customize"), items: enabled("nav.customize") ? [{ label: t("nav.customize"), href: "/customize", icon: Palette }, enabled("nav.constellations") && { label: t("nav.constellations", undefined, "Constellations"), href: "/constellations", icon: UsersRound }].filter((item): item is DashboardNavItem => Boolean(item)) : [] },
     { label: t("nav.links"), items: enabled("nav.links") ? [{ label: t("nav.links"), href: "/links", icon: Link2 }] : [] },
@@ -77,9 +81,10 @@ function SidebarContent({ close, onToggleDesktop }: { close: () => void; onToggl
   const accountActive = Boolean(accountGroup?.items.some((item) => isActive(pathname, item.href)));
   const customizeActive = Boolean(customizeGroup?.items.some((item) => isActive(pathname, item.href)));
   useEffect(() => {
+    if (premiumActive) setPremiumOpen(true);
     if (accountActive) setAccountOpen(true);
     if (customizeActive) setCustomizeOpen(true);
-  }, [accountActive, customizeActive]);
+  }, [accountActive, customizeActive, premiumActive]);
   const searchable = useMemo(() => {
     const items = [
       ...groups.flatMap((group) => group.items),
@@ -92,15 +97,15 @@ function SidebarContent({ close, onToggleDesktop }: { close: () => void; onToggl
   }, [groups, moreItems, query, t, user?.isAdmin, user?.isStaff]);
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex h-[76px] items-center justify-between px-5">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="flex h-[76px] shrink-0 items-center justify-between px-5">
         <Link href="/" onClick={close} className="flex items-center gap-3">
           <Image src="/dashboard/apple-touch-icon.png" alt="Misa.lol" width={36} height={36} className="h-9 w-9 rounded-2xl object-cover shadow-[0_0_25px_rgba(225,29,72,.28)]" />
           <span className="text-[15px] font-semibold tracking-[-.02em]">Misa<span className="text-[#fb7185]">.lol</span></span>
         </Link>
         <div className="flex items-center gap-1">
-          {onToggleDesktop && <button type="button" className="hidden rounded-lg p-1.5 text-zinc-500 hover:bg-white/[.06] hover:text-white md:flex" onClick={onToggleDesktop} aria-label="Hide navigation" title="Hide navigation"><PanelLeftClose size={17} /></button>}
-          <button type="button" className="rounded-lg p-1.5 text-zinc-500 hover:bg-white/[.06] hover:text-white md:hidden" onClick={close} aria-label={t("nav.close")}><X size={18} /></button>
+          {onToggleDesktop && <button type="button" className="sidebar-close hidden md:flex" onClick={onToggleDesktop} aria-label="Close navigation" title="Close navigation"><X size={18} strokeWidth={1.8} /></button>}
+          <button type="button" className="sidebar-close md:hidden" onClick={close} aria-label={t("nav.close")}><X size={18} /></button>
         </div>
       </div>
       <div className="relative px-4">
@@ -133,7 +138,7 @@ function SidebarContent({ close, onToggleDesktop }: { close: () => void; onToggl
           </div>
         )}
       </div>
-      <nav className="mt-6 flex-1 space-y-3 overflow-y-auto px-3 pb-5">
+      <nav className="mt-6 min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 pb-5">
         {accountGroup ? (
           <div>
             <button type="button" onClick={() => setAccountOpen((open) => !open)} aria-expanded={accountOpen} className={`flex h-11 w-full items-center gap-3 rounded-2xl px-3 text-start text-sm font-semibold text-white transition ${accountActive ? "bg-[#e11d48]/20" : "bg-white/[.035] hover:bg-white/[.06]"}`}>
@@ -156,7 +161,10 @@ function SidebarContent({ close, onToggleDesktop }: { close: () => void; onToggl
         ) : null}
         {linksGroup?.items.map((item) => <NavLink key={item.href} {...item} close={close} />)}
         {(user?.isAdmin || user?.isStaff) ? <NavLink href="/admin" label={t("nav.admin")} icon={ShieldCheck} close={close} /> : null}
-        {moreItems.map((item) => <NavLink key={item.href} {...item} close={close} />)}
+        {moreItems.map((item) => item.href !== "/premium" ? <NavLink key={item.href} {...item} close={close} /> : <div key={item.href}>
+          <button type="button" onClick={() => { if (!premiumActive) setPremiumOpen(v => !v); else setPremiumOpen(true); }} aria-expanded={premiumOpen || premiumActive} className={`flex h-11 w-full items-center gap-3 rounded-2xl px-3 text-start text-sm font-semibold text-white transition ${premiumActive ? "bg-[#e11d48]/20" : "hover:bg-white/[.055]"}`}><Sparkles size={17} className={premiumActive ? "text-[#fda4af]" : "text-zinc-300"} /><span className="flex-1">{item.label}</span><ChevronRight size={15} className={`transition-transform ${premiumOpen || premiumActive ? "rotate-90" : ""}`} /></button>
+          {(premiumOpen || premiumActive) && <div className="mt-1.5 space-y-1 ps-7">{premiumItems.map(child => { const active = premiumActive && (premiumView === child.view || (child.view === "general" && !["layout", "metadata"].includes(premiumView))); return <Link key={child.view} href={`/premium?view=${child.view}`} scroll={false} onClick={close} aria-current={active ? "page" : undefined} className={`flex min-h-10 items-center rounded-xl px-3 text-sm transition ${active ? "bg-white/[.06] text-white" : "text-zinc-400 hover:bg-white/[.04] hover:text-white"}`}>{child.label}</Link>; })}</div>}
+        </div>)}
         <div className="pt-2">
           <div className="rounded-2xl border border-white/[.07] bg-white/[.025] p-2.5">
             <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[.18em] text-zinc-400">{t("language.label")}</p>
@@ -165,10 +173,11 @@ function SidebarContent({ close, onToggleDesktop }: { close: () => void; onToggl
         </div>
         <div className="rounded-[24px] border border-white/[.06] bg-white/[.025] p-2">
           <NavLink href="/help" label={t("nav.help")} icon={CircleHelp} close={close} />
-          <a href={`${publicOrigin}/${config.profile.username}`} target="_blank" rel="noreferrer" className="mt-1 flex h-10 items-center gap-3 rounded-xl px-3 text-sm font-medium text-white transition hover:bg-white/[.055]"><Share2 size={17} className="text-zinc-300" />{t("nav.share")}</a>
+          {myPage ? <a href={myPage} target="_blank" rel="noopener noreferrer" className="mt-1 flex min-h-11 items-center gap-3 rounded-xl border border-rose-400/25 bg-rose-500/10 px-3 text-sm font-medium text-rose-100 transition hover:bg-rose-500/20"><ExternalLink size={17} />{t("nav.myPage", undefined, "My page")}</a> : <Link href="/settings" onClick={close} className="mt-1 flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm text-zinc-400"><ExternalLink size={17} />Complete your profile</Link>}
+          {myPage && <a href={myPage} target="_blank" rel="noopener noreferrer" className="mt-1 flex h-10 items-center gap-3 rounded-xl px-3 text-sm font-medium text-white transition hover:bg-white/[.055]"><Share2 size={17} className="text-zinc-300" />{t("nav.share")}</a>}
         </div>
       </nav>
-      <div className="border-t border-white/[.06] p-3">
+      <div className="shrink-0 border-t border-white/[.06] p-3 pb-[max(12px,env(safe-area-inset-bottom))]">
         <div className="flex items-center gap-3 rounded-[26px] border border-white/[.06] bg-white/[.035] p-2.5 shadow-[0_12px_30px_rgba(0,0,0,.18)]">
           {avatarUrl ? <Image src={avatarUrl} alt="" width={40} height={40} unoptimized className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-white/10" /> : <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#5d4ea4] to-[#241d45] text-xs font-semibold text-white">{initials}</div>}
           <div className="min-w-0 flex-1">
@@ -188,9 +197,27 @@ function SidebarContent({ close, onToggleDesktop }: { close: () => void; onToggl
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user, isReady } = useAuth();
-  const { profileReady } = useProfile();
   const { dir, locale, t } = useI18n();
   const [open, setOpen] = useState(false);
+  const mobileSidebar = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    mobileSidebar.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    const key = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+      if (event.key !== "Tab") return;
+      const items = [...(mobileSidebar.current?.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),input') || [])].filter(el => el.offsetParent !== null);
+      const first = items[0], last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    const resize = () => { if (window.innerWidth >= 768) setOpen(false); };
+    document.addEventListener("keydown", key); window.addEventListener("resize", resize);
+    return () => { document.body.style.overflow = overflow; document.removeEventListener("keydown", key); window.removeEventListener("resize", resize); previous?.focus(); };
+  }, [open]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const localPreview = process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_LOCAL_PREVIEW === "true";
   useEffect(() => {
@@ -232,26 +259,17 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   if (!localPreview && !user?.username) return <UsernameClaimGate />;
   return (
     <div className="app-shell min-h-screen" dir={dir} lang={locale}>
-      {!profileReady && (
-        <div role="status" className="pointer-events-none fixed inset-x-0 top-3 z-[70] flex justify-center">
-          <div className="rounded-full border border-white/[.08] bg-[#0d0d12]/90 px-3 py-1.5 text-xs text-zinc-500 shadow-lg backdrop-blur">
-            Preview loaded · syncing your profile...
-          </div>
-        </div>
-      )}
-      {!sidebarCollapsed && <aside className="sidebar-glass fixed inset-y-0 start-0 z-50 hidden w-[280px] border-e md:block"><SidebarContent close={() => undefined} onToggleDesktop={toggleSidebar} /></aside>}
-      {sidebarCollapsed && (
-        <button type="button" className="sidebar-glass fixed start-3 top-4 z-50 hidden h-10 w-10 items-center justify-center rounded-xl border text-zinc-300 shadow-lg hover:text-white md:flex" onClick={toggleSidebar} aria-label="Show navigation" title="Show navigation">
-          <PanelLeftOpen size={17} />
-        </button>
-      )}
+      <aside id="desktop-navigation" inert={sidebarCollapsed} aria-hidden={sidebarCollapsed} className={`sidebar-glass desktop-sidebar fixed inset-y-0 start-0 z-50 hidden w-[280px] border-e md:block ${sidebarCollapsed ? "is-collapsed" : ""}`}><SidebarContent close={() => undefined} onToggleDesktop={toggleSidebar} /></aside>
+      <button type="button" className={`sidebar-edge sidebar-glass fixed top-1/2 z-[51] hidden h-12 w-8 -translate-y-1/2 items-center justify-center rounded-xl border text-zinc-300 shadow-lg hover:text-white md:flex ${sidebarCollapsed ? "is-collapsed" : ""}`} onClick={toggleSidebar} aria-expanded={!sidebarCollapsed} aria-controls="desktop-navigation" aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}>
+        {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+      </button>
       {open && (
         <>
           <button type="button" className="animate-fade-in fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden" onClick={() => setOpen(false)} aria-label={t("nav.close")} />
-          <aside className="sidebar-glass animate-slide-in fixed inset-y-0 start-0 z-50 w-[288px] border-e md:hidden"><SidebarContent close={() => setOpen(false)} /></aside>
+          <aside ref={mobileSidebar} role="dialog" aria-modal="true" aria-label="Navigation" className="sidebar-glass animate-slide-in fixed inset-y-0 start-0 z-50 w-[min(288px,calc(100vw-16px))] border-e md:hidden"><SidebarContent close={() => setOpen(false)} /></aside>
         </>
       )}
-      <div className={sidebarCollapsed ? "" : "md:ps-[280px]"}>
+      <div inert={open} className={`dashboard-content ${sidebarCollapsed ? "md:ps-10" : "md:ps-[280px]"}`}>
         <header className="sticky top-0 z-30 flex h-[68px] items-center border-b border-white/[.06] bg-[#07070a]/70 px-4 backdrop-blur-xl sm:px-8 md:hidden">
           <button type="button" onClick={() => setOpen(true)} className="rounded-[11px] border border-[#e11d48]/30 bg-[#e11d48]/10 p-2 text-[#fecdd3] hover:bg-[#e11d48]/20" aria-label={t("nav.open")}><Menu size={19} /></button>
           <div className="ms-3 flex items-center gap-2 text-sm font-semibold"><Image src="/dashboard/apple-touch-icon.png" alt="" width={30} height={30} className="h-7 w-7 rounded-lg object-cover" />Misa<span className="text-[#fb7185]">.lol</span></div>

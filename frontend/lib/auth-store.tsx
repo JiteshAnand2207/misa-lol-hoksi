@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { SwitcherAccount } from "@/lib/account-security";
+import type { ProfileConfig } from "@/lib/types";
 import { clearDashboardCache } from "@/lib/dashboard-cache";
 
 export interface AuthUser {
@@ -18,11 +19,13 @@ export interface AuthUser {
   mfaCodesLeft: number;
   uid: string;
   isAdmin: boolean;
+  premium: boolean;
   isStaff: boolean;
   staffRole: "owner" | "admin" | "moderator" | null;
   isTemplateCreator: boolean;
   providers?: { email: boolean; google: boolean; discord: boolean; telegram: boolean };
   accounts: SwitcherAccount[];
+  profile?: ProfileConfig | null;
 }
 
 type AuthResult = { ok: true; user: AuthUser } | { ok: false; error: string };
@@ -59,6 +62,7 @@ function announceAuthEvent(event: AuthEvent) {
 function normalizeUser(value: Record<string, unknown>): AuthUser {
   return {
     id: String(value.id || ""),
+    premium: value.premium === true,
     accountId: String(value.account_id || value.accountId || ""),
     username: value.username ? String(value.username) : null,
     displayName: String(value.display_name || value.displayName || value.username || "Misa user"),
@@ -76,6 +80,7 @@ function normalizeUser(value: Record<string, unknown>): AuthUser {
     isTemplateCreator: Boolean(value.is_template_creator || value.isTemplateCreator || value.is_admin || value.isAdmin),
     providers: value.providers as AuthUser["providers"],
     accounts: Array.isArray(value.accounts) ? value.accounts as SwitcherAccount[] : [],
+    profile: value.profile === null ? null : value.profile && typeof value.profile === "object" ? value.profile as ProfileConfig : undefined,
   };
 }
 
@@ -115,9 +120,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const requestVersion = useRef(0);
 
   const commitUser = useCallback((next: AuthUser | null) => {
-    storeSharedUser(next);
-    userRef.current = next;
-    setUser((current) => JSON.stringify(current) === JSON.stringify(next) ? current : next);
+    const current = userRef.current;
+    const resolved = next && next.profile === undefined && current?.profile !== undefined
+      ? { ...next, profile: current.profile }
+      : next;
+    storeSharedUser(resolved);
+    userRef.current = resolved;
+    setUser((existing) => JSON.stringify(existing) === JSON.stringify(resolved) ? existing : resolved);
   }, []);
 
   const loadCurrentUser = useCallback(async (force = false) => {
@@ -201,6 +210,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }), [commitUser, isReady, loadCurrentUser, user]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useOptionalAuth() {
+  return useContext(AuthContext);
 }
 
 export function useAuth() {

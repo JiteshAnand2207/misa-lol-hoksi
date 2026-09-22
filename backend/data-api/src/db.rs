@@ -159,6 +159,8 @@ pub async fn migrate(pool: &PgPool) -> Result<()> {
             config JSONB NOT NULL,
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS disabled_at TIMESTAMPTZ",
+        "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS disabled_reason TEXT",
         "CREATE INDEX IF NOT EXISTS users_username_lower_idx ON users (LOWER(username))",
         "CREATE TABLE IF NOT EXISTS reserved_usernames (
             username VARCHAR(32) PRIMARY KEY,
@@ -241,6 +243,7 @@ pub async fn migrate(pool: &PgPool) -> Result<()> {
     ] {
         sqlx::query(statement).execute(pool).await?;
     }
+    crate::features::schema::registers(pool).await?;
     ensure_account_ids(pool).await?;
     sqlx::query("ALTER TABLE users ALTER COLUMN account_id SET NOT NULL").execute(pool).await?;
     Ok(())

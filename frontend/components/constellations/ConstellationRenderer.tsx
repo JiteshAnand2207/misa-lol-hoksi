@@ -20,6 +20,7 @@ interface RendererProps {
   onSelect?: (member: ConstellationMember) => void;
   onPlacement?: (member: ConstellationMember, patch: PlacementPatch, commit: boolean) => void;
   className?: string;
+  backgroundAudio?: boolean;
 }
 
 function resolvedProfile(group: RendererProps["group"], member: ConstellationMember): ProfileConfig | null {
@@ -57,7 +58,7 @@ function resolvedProfile(group: RendererProps["group"], member: ConstellationMem
 }
 
 export function ConstellationRenderer(props: RendererProps) {
-  const { group, editor = false, fullPreview = false, canvasSize, selectedId, editableMemberIds, onSelect, onPlacement, className = "" } = props;
+  const { group, editor = false, fullPreview = false, canvasSize, selectedId, editableMemberIds, onSelect, onPlacement, className = "", backgroundAudio = false } = props;
   const canvas = useRef<HTMLDivElement>(null);
   const drag = useRef<{
     id: string;
@@ -159,7 +160,7 @@ export function ConstellationRenderer(props: RendererProps) {
       aria-label={`${group.name} Constellation with ${group.members.length} profiles`}
     >
       {background.type === "image" && background.url ? <div className={styles.backgroundImage} style={{ backgroundImage: `url("${background.url}")` }} /> : null}
-      {background.type === "video" && background.url ? <video className={styles.backgroundVideo} src={background.url} autoPlay muted loop playsInline preload="metadata" /> : null}
+      {background.type === "video" && background.url ? <video className={styles.backgroundVideo} src={background.url} autoPlay muted={!backgroundAudio} loop playsInline preload="metadata" data-constellation-background-video /> : null}
       <BackgroundEffectLayer effect={sharedAssets.effect || "None"} className={styles.effectVideo} />
       {(!sharedAssets.effect || sharedAssets.effect === "None") && sharedAssets.effectVideo?.url ? <video className={styles.effectVideo} src={sharedAssets.effectVideo.url} autoPlay muted loop playsInline preload="metadata" aria-hidden="true" /> : null}
       <div className={styles.scrim} />

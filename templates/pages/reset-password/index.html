@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>misa.lol - Choose a new password</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400;1,700&family=Caveat:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/responsive.css">
+    <script src="/js/config.js"></script>
+    <script src="/js/auth.js?v=account-tools"></script>
+</head>
+<body class="auth-page login-page auth-api-page">
+    <div class="auth-container">
+        <section class="auth-form-section">
+            <div class="auth-header">
+                <a href="/" class="logo">† misa.lol</a>
+                <div class="decorative-top-right">YOUR CORNER OF THE INTERNET.</div>
+            </div>
+
+            <div class="auth-form-wrapper">
+                <h1 class="auth-title">choose a new password.</h1>
+                <p class="auth-subtitle">this signs out every other session on the account.</p>
+                <p class="auth-message" id="auth-message" hidden></p>
+
+                <form class="auth-form" id="reset-form">
+                    <input type="hidden" name="token" id="reset-token">
+                    <div class="form-group">
+                        <label for="password">New password</label>
+                        <div class="input-wrapper">
+                            <input type="password" id="password" name="password" placeholder="At least 8 characters" required minlength="8">
+                            <i class="fa-regular fa-eye input-icon password-toggle"></i>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirm-password">Confirm password</label>
+                        <div class="input-wrapper">
+                            <input type="password" id="confirm-password" name="confirm-password" placeholder="Confirm password" required minlength="8">
+                            <i class="fa-regular fa-eye input-icon password-toggle"></i>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-ivory btn-large btn-full">SAVE NEW PASSWORD</button>
+                </form>
+
+                <p class="auth-footer">
+                    Need a new link? <a href="/forgot-password" class="crimson-link">Request another →</a>
+                </p>
+            </div>
+
+            <div class="decorative-bottom-left">
+                SAME PEOPLE.<br>NEW POSSIBILITIES.
+            </div>
+        </section>
+    </div>
+    <script src="/js/main.js"></script>
+</body>
+</html>

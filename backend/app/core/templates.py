@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from app.core.profile_sanitize import sanitize_profile_config
 
-TEMPLATE_ASSET_KEYS = ("banner", "background", "cursor", "backgroundVideo", "audio", "audioArtwork", "customFont", "clickSound")
+TEMPLATE_ASSET_KEYS = ("banner", "background", "cursor", "backgroundVideo", "audio", "audioArtwork", "customFont", "clickSound", "entryIcon")
 PERSONAL_SETTINGS = (
     "ogTitle",
     "ogDescription",
@@ -45,7 +45,7 @@ def snapshot_template_config(profile: dict[str, Any]) -> dict[str, Any]:
     snapped["audioEnabled"] = bool(assets.get("audioEnabled")) if "audioEnabled" in assets else True
     snapped["audioSource"] = str(assets.get("audioSource") or "")[:16]
     snapped["volume"] = assets.get("volume", 65)
-    return {"settings": settings, "assets": snapped}
+    return {"settings": settings, "assets": snapped, "sections": cleaned.get("sections", [])}
 
 
 def preview_from_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -91,6 +91,8 @@ def apply_template_snapshot(current: dict[str, Any], snapshot: dict[str, Any]) -
     merged = dict(base)
     merged["settings"] = merged_settings
     merged["assets"] = current_assets
+    if "sections" in snap:
+        merged["sections"] = snap["sections"]
     return sanitize_profile_config(merged)
 
 

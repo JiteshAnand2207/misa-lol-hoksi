@@ -19,12 +19,18 @@ export function PublicConstellationView({ group, error = "" }: { group: PublicCo
   const entryText = ownerProfile?.settings.entryText?.trim() || "click to enter...";
   const enter = () => {
     if (ownerProfile?.settings.clickSound) playClickSound(ownerProfile.assets.clickSound?.url);
+    if (typeof document !== "undefined") {
+      document.querySelectorAll<HTMLVideoElement>("[data-constellation-background-video]").forEach((video) => {
+        video.muted = false;
+        void video.play().catch(() => { video.muted = true; });
+      });
+    }
     setEntered(true);
   };
 
   return <main className="relative min-h-[100svh] overflow-x-hidden bg-[#07070a]">
     <motion.div initial={false} animate={entered ? { opacity: 1, scale: 1 } : { opacity: .82, scale: 1.01 }} transition={{ duration: .55, ease: [0.22, 1, .36, 1] }}>
-      <ConstellationRenderer group={group} />
+      <ConstellationRenderer group={group} backgroundAudio={entered} />
     </motion.div>
     <AnimatePresence>
       {!entered ? <motion.button type="button" aria-label={entryText} className="fixed inset-0 z-[100] grid cursor-pointer place-items-center bg-black/60 text-white backdrop-blur-[2px]" onClick={enter} initial={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .35 }}>

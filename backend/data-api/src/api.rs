@@ -1,5 +1,5 @@
 use crate::db::{self, NewUser, OAuthRequest, ProfileWrite, User, UserPatch};
-use axum::extract::{Path, Query, Request, State};
+use axum::extract::{FromRef, Path, Query, Request, State};
 use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
@@ -13,6 +13,12 @@ use uuid::Uuid;
 pub struct AppState {
     pub pool: PgPool,
     pub api_key: String,
+}
+
+impl FromRef<AppState> for PgPool {
+    fn from_ref(state: &AppState) -> PgPool {
+        state.pool.clone()
+    }
 }
 
 pub async fn require_key(State(state): State<AppState>, req: Request, next: Next) -> Response {

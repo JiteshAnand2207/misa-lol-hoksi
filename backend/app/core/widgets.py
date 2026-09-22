@@ -11,7 +11,7 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.network_safety import safe_public_url
-from app.core.profile_sanitize import sanitize_widgets
+from app.core.profile_sanitize import sanitize_widgets, sanitize_sections
 from app.db.dragonfly import get_dragonfly
 
 WIDGET_TYPES = ("youtube", "spotify", "discord", "telegram", "roblox", "github", "lastfm", "timezone", "weather")
@@ -77,9 +77,21 @@ def safe_widget_url(url: Any) -> str | None:
     return _https(url)
 
 
+def profile_widget_inputs(config):
+    items = sanitize_widgets(config.get("widgets"))
+    for section in sanitize_sections(config.get("sections")):
+        if not section.get("enabled"):
+            continue
+        for side, suffix in (("leftCard", "l"), ("rightCard", "r")):
+            card = section.get(side)
+            if card and card.get("enabled") and card.get("type") != "presence":
+                items.append({**card, "id": str(section["id"])[:38] + "-" + suffix})
+    return items
+
+
 async def resolve_profile_widgets(config: dict[str, Any], include_empty: bool = False) -> list[dict[str, Any]]:
     pending: list[dict[str, Any]] = []
-    for item in sanitize_widgets(config.get("widgets")):
+    for item in profile_widget_inputs(config):
         if not item.get("enabled"):
             continue
         if not include_empty and not str(item.get("value") or "").strip():
@@ -87,7 +99,11 @@ async def resolve_profile_widgets(config: dict[str, Any], include_empty: bool = 
         pending.append(item)
     if not pending:
         return []
-    return list(await asyncio.gather(*(resolve_widget(item) for item in pending)))
+    # Repeated left/right cards can share a provider input; resolve it once.
+    unique = {(item["type"], item["value"]): item for item in pending}
+    values = await asyncio.gather(*(resolve_widget(item) for item in unique.values()))
+    resolved = dict(zip(unique, values))
+    return [{**resolved[(item["type"], item["value"])], "id": item["id"]} for item in pending]
 
 
 async def resolve_widget(item: dict[str, Any]) -> dict[str, Any]:
@@ -149,7 +165,7 @@ def _youtube_url(value: str) -> str | None:
     host = _host(text)
     if host in {"youtu.be", "www.youtu.be"}:
         return text
-    if host.endswith("youtube.com") or host.endswith("youtube-nocookie.com"):
+    if host in {"youtube.com", "youtube-nocookie.com"} or host.endswith((".youtube.com", ".youtube-nocookie.com")):
         return text
     return None
 
@@ -160,6 +176,9 @@ async def _youtube(value: str) -> dict[str, Any]:
         return {"status": "error", "title": "YouTube", "subtitle": "Use a YouTube video or channel URL."}
     data = await _oembed("https://www.youtube.com/oembed", url)
     if not data:
+        path = urlparse(url).path
+        if path.startswith(("/@", "/channel/", "/c/", "/user/")) and _https(url):
+            return {"status": "ok", "title": path.rstrip("/").split("/")[-1][:80], "subtitle": "YouTube channel · open profile", "image": None, "href": _https(url), "meta": {"provider": "YouTube"}}
         return {"status": "error", "title": "YouTube", "subtitle": "YouTube did not return that page."}
     href = _https(url)
     return {

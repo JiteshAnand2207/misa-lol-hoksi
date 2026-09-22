@@ -22,7 +22,7 @@ function isAdminRoute(pathname: string) {
 }
 
 function isStandaloneRoute(pathname: string) {
-  return pathname.startsWith("/p/")
+  return pathname === "/preview" || pathname.startsWith("/p/")
     || pathname.startsWith("/c/");
 }
 

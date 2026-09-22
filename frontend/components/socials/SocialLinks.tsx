@@ -25,7 +25,7 @@ async function copyText(value: string) {
   }
 }
 
-export function SocialLinks({ config, className = "mt-7" }: { config: ProfileConfig; className?: string }) {
+export function SocialLinks({ config, className = "mt-7", align }: { config: ProfileConfig; className?: string; align?: "left" | "center" | "right" }) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [toast, setToast] = useState("");
   const settings = config.settings;
@@ -58,14 +58,15 @@ export function SocialLinks({ config, className = "mt-7" }: { config: ProfileCon
 
   return (
     <div className={`relative z-20 w-full ${className}`}>
-      <div className="flex w-full flex-wrap gap-2.5" style={{ justifyContent: justifyContent[normalizeSocialAlign(settings.socialAlign)] }}>
+      <div className="flex w-full flex-wrap gap-2.5" style={{ justifyContent: justifyContent[normalizeSocialAlign(align ?? settings.socialAlign)] }}>
         {visible.map((social) => {
           const href = sanitizeSocialHref(social.value, social.platform);
           const action = defaultSocialAction(social);
           const color = cardIconColor(social, settings);
           const glow = resolveIconGlow(social, settings.socialGlow);
           const styleKind = settings.buttonStyle || "glass";
-          const className = `pointer-events-auto flex h-10 w-10 items-center justify-center rounded-xl transition hover:-translate-y-1 ${styleKind === "solid" ? "border-0" : styleKind === "outline" ? "border-2 bg-transparent hover:bg-white/[.06]" : "border border-white/[.09] bg-white/[.055] hover:border-white/20 hover:bg-white/[.1]"}`;
+          const simplistic = settings.layout === "Simplistic";
+          const className = `${simplistic ? "profile-social-button" : ""} pointer-events-auto flex h-10 w-10 items-center justify-center rounded-xl transition hover:-translate-y-1 ${styleKind === "solid" ? "border-0" : styleKind === "outline" ? "border-2 bg-transparent hover:bg-white/[.06]" : "border border-white/[.09] bg-white/[.055] hover:border-white/20 hover:bg-white/[.1]"}`;
           const style = styleKind === "solid"
             ? { color: "#0b0b10", fill: "#0b0b10", backgroundColor: color, filter: glow ? `drop-shadow(0 0 10px ${color})` : "none" }
             : { color, fill: color, borderColor: color, filter: glow ? `drop-shadow(0 0 6px ${color}) drop-shadow(0 0 16px ${color})` : "none" };
@@ -73,13 +74,13 @@ export function SocialLinks({ config, className = "mt-7" }: { config: ProfileCon
           if (action === "open") {
             return (
               <a key={social.id} href={href || "#"} target="_blank" rel="noopener noreferrer" onClick={(event) => openValue(social, event)} data-social-id={social.id} data-social-action="open" aria-label={`Open ${social.label}`} title={social.value} className={className} style={style}>
-                {icon}
+                {icon}{simplistic && <span className="min-w-0 break-words">{social.label}</span>}
               </a>
             );
           }
           return (
             <button key={social.id} type="button" onClick={() => void copyValue(social)} data-social-id={social.id} data-social-action="copy" aria-label={`Copy ${social.label}`} title={copiedId === social.id ? "Copied" : `Copy ${social.value}`} className={className} style={style}>
-              {icon}
+              {icon}{simplistic && <span className="min-w-0 break-words">{social.label}</span>}
             </button>
           );
         })}

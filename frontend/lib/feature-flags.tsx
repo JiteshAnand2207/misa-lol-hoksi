@@ -5,7 +5,6 @@ import { dashboardRequest, peekDashboardCache } from "@/lib/dashboard-cache";
 
 export const DEFAULT_FEATURE_FLAGS: Record<string, boolean> = {
   "nav.overview": true, "nav.analytics": true, "nav.badges": true, "nav.settings": true, "nav.security": true, "nav.constellations": true,
-  "nav.me": true,
   "nav.customize": true, "nav.links": true, "nav.leaderboard": true, "nav.premium": true, "nav.templates": true,
   "customize.assets": true, "customize.assets.avatar": true, "customize.assets.background": true,
   "customize.assets.backgroundVideo": true, "customize.assets.audio": true, "customize.assets.audioCrop": true,

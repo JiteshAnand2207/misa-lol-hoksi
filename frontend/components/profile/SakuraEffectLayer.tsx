@@ -1,5 +1,6 @@
 "use client";
 
+import { colorRgb } from "@/lib/effect-colors";
 import { useEffect, useRef } from "react";
 
 /*
@@ -11,7 +12,7 @@ import { useEffect, useRef } from "react";
 const randomInt = (min: number, max: number) =>
   Math.floor(Math.random() * (max - min + 1)) + min;
 
-export function SakuraEffectLayer({ className = "" }: { className?: string }) {
+export function SakuraEffectLayer({ className = "", color }: { className?: string; color?: string }) {
   const layerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -44,7 +45,7 @@ export function SakuraEffectLayer({ className = "" }: { className?: string }) {
         `misa-sakura-${sway} ${randomInt(2, 4)}s linear 0s infinite`,
       ].join(", ");
       petal.style.background =
-        "linear-gradient(120deg, rgba(255, 183, 197, 0.9), rgba(255, 197, 208, 0.9))";
+        color ? `linear-gradient(120deg, rgba(${colorRgb(color, "#ffb7c5")},.9), rgba(${colorRgb(color, "#ffb7c5")},.9))` : "linear-gradient(120deg, rgba(255, 183, 197, 0.9), rgba(255, 197, 208, 0.9))";
       petal.style.borderRadius =
         `${randomInt(14, 14 + Math.floor(Math.random() * 10))}px ${randomInt(1, Math.max(1, Math.floor(width / 4)))}px`;
       petal.style.height = `${height}px`;
@@ -70,7 +71,7 @@ export function SakuraEffectLayer({ className = "" }: { className?: string }) {
       document.removeEventListener("visibilitychange", onVisibility);
       layer.replaceChildren();
     };
-  }, []);
+  }, [color]);
 
   return (
     <div

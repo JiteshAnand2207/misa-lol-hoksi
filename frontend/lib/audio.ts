@@ -10,8 +10,8 @@ const MAX_SAVE_CHARS = 60_000_000;
 export type AudioSource = "video" | "standalone" | "tracks";
 
 export function resolvedAudioSource(assets: ProfileConfig["assets"]): AudioSource {
-  if (Array.isArray(assets.tracks) && assets.tracks.some((track) => track?.audio?.url)) return "tracks";
   if (assets.audioSource === "video" || assets.audioSource === "standalone" || assets.audioSource === "tracks") return assets.audioSource;
+  if (Array.isArray(assets.tracks) && assets.tracks.some((track) => track?.audio?.url)) return "tracks";
   if (assets.audio?.url) return "standalone";
   return "video";
 }
@@ -30,7 +30,7 @@ export function usesUploadedProfileAudio(assets: ProfileConfig["assets"]): boole
 }
 
 export function playlistTracks(assets: ProfileConfig["assets"]): AudioTrack[] {
-  if (Array.isArray(assets.tracks) && assets.tracks.length > 0) {
+  if (resolvedAudioSource(assets) === "tracks" && Array.isArray(assets.tracks) && assets.tracks.length > 0) {
     return assets.tracks.filter((track) => track?.audio?.url);
   }
   if (!assets.audio?.url) return [];
@@ -114,6 +114,7 @@ export function compactProfileForSave(next: ProfileConfig, previous: ProfileConf
       cursor: compactAsset(next.assets.cursor, previous.assets.cursor),
       ogImage: compactAsset(next.assets.ogImage || { url: null }, previous.assets.ogImage),
       favicon: compactAsset(next.assets.favicon || { url: null }, previous.assets.favicon),
+      entryIcon: compactAsset(next.assets.entryIcon || { url: null }, previous.assets.entryIcon),
       customFont: compactAsset(next.assets.customFont || { url: null }, previous.assets.customFont),
       clickSound: compactAsset(next.assets.clickSound || { url: null }, previous.assets.clickSound),
       audio: compactAsset(next.assets.audio, previous.assets.audio),

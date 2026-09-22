@@ -272,6 +272,17 @@ async def list_user_badge_grants(user_id: str | UUID) -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
+async def set_badge_visible(user_id: str | UUID, badge_id: str, enabled: bool) -> bool:
+    owner = UUID(str(user_id))
+    result = await _pool().execute(
+        "UPDATE user_badges SET enabled=$3 WHERE user_id=$1 AND badge_id=$2",
+        owner,
+        badge_id,
+        enabled,
+    )
+    return bool(result and result.endswith(" 1"))
+
+
 async def list_categories() -> list[dict[str, Any]]:
     return [dict(row) for row in await _pool().fetch("SELECT c.*, (SELECT count(*) FROM badges b WHERE b.category_id=c.id) AS badge_count FROM badge_categories c ORDER BY display_order,name")]
 

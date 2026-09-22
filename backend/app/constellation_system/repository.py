@@ -626,7 +626,9 @@ class ConstellationRepository:
             result = self._serialize(group, members)
             for key in ("ownerId", "invitations", "availableSlots"):
                 result.pop(key, None)
+            from app.core.premium import has_premium, public_projection
             for member in result["members"]:
+                member["profile"] = public_projection(member.get("profile") or {}, await has_premium(member["userId"]))
                 member.pop("userId", None)
                 member.pop("active", None)
             return result

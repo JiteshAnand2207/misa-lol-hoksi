@@ -16,7 +16,7 @@ from app.core.config import get_settings
 from app.core.logging import setup_logging
 from app.core.profiles import resolve_public_profile
 from app.core.public_profile_html import render_public_profile
-from app.core.widgets import resolve_profile_widgets
+from app.core.widgets import profile_widget_inputs
 from app.core.security import RESERVED_USERNAMES, USERNAME_RE
 from app.core.usernames import current_handle_for, username_redirect
 from app.core.turnstile import TURNSTILE_ENABLED
@@ -145,60 +145,9 @@ def create_app() -> FastAPI:
                     status_code=502,
                 )
             if profile:
-                try:
-                    widgets = await resolve_profile_widgets(profile)
-                except Exception:
-                    widgets = []
-                default_fonts = await admin_db.list_default_fonts() if admin_db.has_pool() else []
-                asks = None
-                signatures = None
-                try:
-                    if admin_db.has_pool() and (profile.get("settings") or {}).get("asks"):
-                        from app.db import features_db
-                        uid = (profile.get("profile") or {}).get("uid")
-                        if uid:
-                            asks = await features_db.list_published_asks(str(uid))
-                except Exception:
-                    asks = None
-                try:
-                    if admin_db.has_pool() and (profile.get("settings") or {}).get("guestbook"):
-                        from app.db import features_db
-                        uid = (profile.get("profile") or {}).get("uid")
-                        if uid:
-                            signatures = await features_db.list_approved_guestbook(str(uid))
-                except Exception:
-                    signatures = None
-                tally = None
-                try:
-                    tally_settings = (profile.get("settings") or {}).get("tally")
-                    if admin_db.has_pool() and isinstance(tally_settings, dict) and tally_settings.get("q") and tally_settings.get("options"):
-                        from app.db import features_db
-                        uid = (profile.get("profile") or {}).get("uid")
-                        if uid:
-                            totals = await features_db.tally_totals(str(uid))
-                            by_option = {str(item.get("option")): int(item.get("count") or 0) for item in (totals.get("options") or [])}
-                            options = [
-                                {"name": str(option_name).strip(), "count": by_option.get(str(option_name).strip(), 0)}
-                                for option_name in (tally_settings.get("options") or [])
-                                if str(option_name).strip()
-                            ]
-                            tally = {
-                                "question": str(tally_settings.get("q") or ""),
-                                "options": options,
-                                "total": int(totals.get("total") or 0),
-                            }
-                except Exception:
-                    tally = None
-                doodles = None
-                try:
-                    if admin_db.has_pool() and (profile.get("settings") or {}).get("doodles"):
-                        from app.db import features_db
-                        uid = (profile.get("profile") or {}).get("uid")
-                        if uid:
-                            doodles = await features_db.list_approved_doodles(str(uid))
-                except Exception:
-                    doodles = None
-                return HTMLResponse(render_public_profile(profile, request, widgets=widgets, default_fonts=default_fonts, asks=asks, signatures=signatures, tally=tally, doodles=doodles), headers={"Cache-Control": "no-store"})
+                widgets = [{**item, "status": "empty", "title": item["type"], "subtitle": "Loading…"} for item in profile_widget_inputs(profile) if item.get("enabled")]
+                default_fonts = await admin_db.list_default_fonts() if admin_db.has_pool() and (profile.get("settings") or {}).get("profileFont", "Inter") != "Inter" else []
+                return HTMLResponse(render_public_profile(profile, request, widgets=widgets, default_fonts=default_fonts), headers={"Cache-Control": "no-store"})
             alias = await current_handle_for(slug)
             if alias:
                 return username_redirect(f"/{alias}")

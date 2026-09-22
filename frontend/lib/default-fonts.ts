@@ -40,12 +40,13 @@ async function fetchDefaultFonts() {
   return loadingFonts;
 }
 
-export function useDefaultFonts() {
+export function useDefaultFonts(enabled = true) {
   const [fonts, setFonts] = useState<DefaultFontOption[]>(cachedFonts || [BUILTIN_DEFAULT_FONT]);
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     void fetchDefaultFonts().then((next) => { if (!cancelled) setFonts(next); });
     return () => { cancelled = true; };
-  }, []);
+  }, [enabled]);
   return fonts;
 }

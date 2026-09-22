@@ -1,8 +1,16 @@
 import type { BannerShape, ProfileConfig, ProfileFont, ProfileLayout, ProfileShape, SocialAlign } from "./types";
 import { fontStack } from "./typography";
 
+export const PROFILE_LAYOUTS: Array<{ id: ProfileLayout; label: string; description: string }> = [
+  {id:"Default",label:"Default",description:"A familiar, balanced profile."},
+  {id:"Modern",label:"Modern",description:"A wide glass frame with a compact identity."},
+  {id:"Simplistic",label:"Simplistic",description:"Quiet details and a light frame."},
+  {id:"Sleek",label:"Sleek",description:"A banner-led profile with a floating avatar."},
+  {id:"Portfolio",label:"Portfolio",description:"Give your biography, work and skills more space."},
+];
+
 export function profileLayout(settings: ProfileConfig["settings"]): ProfileLayout {
-  return settings.layout === "Simplistic" || settings.layout === "Sleek" ? settings.layout : "Modern";
+  return PROFILE_LAYOUTS.find(item => item.id === settings.layout)?.id || "Modern";
 }
 
 export function avatarRadius(shape?: ProfileShape) {

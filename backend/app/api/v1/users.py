@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from httpx import HTTPError
 from pydantic import BaseModel, EmailStr, Field
 
 from app.core.account_security import (
@@ -14,6 +15,7 @@ from app.core.account_security import (
 )
 from app.core.mailer import mailer_configured, send_email_change, send_email_change_notice
 from app.core.public_origin import public_origin_for
+from app.core.profiles import unwrap_profile_config
 from app.core.rate_limit import rate_limit
 from app.core.security import hash_password, normalize_email, validate_username, verify_password
 from app.core.config import Settings, get_settings
@@ -32,7 +34,7 @@ def public_user(user: User, settings: Settings) -> dict:
     return payload
 
 
-async def public_user_payload(user: User, settings: Settings, request: Request | None = None) -> dict:
+async def public_user_payload(user: User, settings: Settings, request: Request | None = None, *, include_profile: bool = False) -> dict:
     payload = public_user(user, settings)
     payload["is_admin"] = await admin_db.is_admin_user(user.id, user.is_admin, settings.admin_user_id_list)
     payload["staff_role"] = await admin_db.staff_role(user.id, user.is_admin, settings.admin_user_id_list)
@@ -40,11 +42,20 @@ async def public_user_payload(user: User, settings: Settings, request: Request |
     payload["is_template_creator"] = bool(
         payload["is_admin"] or await admin_db.user_has_role(user.id, "template_creator")
     )
+    from app.core.premium import has_premium
+    payload["premium"] = await has_premium(user.id)
     payload["has_password"] = bool(user.password_hash)
     payload["mfa_enabled"] = await admin_db.mfa_is_enabled(user.id)
     payload["mfa_codes_left"] = await admin_db.unused_backup_count(user.id) if payload["mfa_enabled"] else 0
     payload["pending_email"] = await pending_email_for(user.id)
     payload["accounts"] = await _switcher_accounts(request, user, settings) if request else []
+    if include_profile:
+        try:
+            payload["profile"] = unwrap_profile_config(await data_api.get_profile(user.id))
+        except (HTTPError, RuntimeError, ValueError, TimeoutError, OSError):
+            # Keep authentication available if optional profile hydration is temporarily unavailable.
+            # The frontend will use its authenticated identity seed and retry the profile endpoint.
+            pass
     return payload
 
 
@@ -117,7 +128,9 @@ async def me(
     settings: SettingsDep,
 ) -> dict:
     remember_switcher_user(response, request, user.id, settings)
-    return await public_user_payload(user, settings, request)
+    payload = await public_user_payload(user, settings, request, include_profile=True)
+    payload["badges"] = await data_api.list_user_badge_grants(user.id)
+    return payload
 
 
 @router.patch("/me/username")

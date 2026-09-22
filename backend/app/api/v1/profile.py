@@ -1,4 +1,5 @@
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Annotated
 from uuid import uuid4
@@ -19,7 +20,7 @@ from app.core.rate_limit import client_ip, rate_limit
 from app.core.r2_storage import get_r2_storage
 from app.core.usernames import current_handle_for, username_redirect
 from app.core.widgets import resolve_profile_widgets
-from app.db import data_api
+from app.db import data_api, feature_api
 from app.models import User
 
 router = APIRouter(prefix="/profile", tags=["profiles"])
@@ -49,11 +50,11 @@ ASSET_LIMITS = {
     "backgroundVideo": 110_000_000, "backgroundEffectVideo": 110_000_000,
     "audio": 40_000_000, "audioArtwork": 15_000_000,
     "clickSound": 400_000, "customFont": 2_000_000, "cover": 3_000_000,
-    "socialIcon": 512_000,
+    "socialIcon": 512_000, "entryIcon": 5_000_000,
 }
 
 def _asset_content_allowed(kind: str, content_type: str) -> bool:
-    if kind in {"avatar", "background", "banner", "ogImage", "favicon", "audioArtwork", "cover", "socialIcon", "cursor"}:
+    if kind in {"avatar", "background", "banner", "ogImage", "favicon", "audioArtwork", "cover", "socialIcon", "cursor", "entryIcon"}:
         return content_type in {"image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif", "image/x-icon", "image/vnd.microsoft.icon"}
     if kind in {"backgroundVideo", "backgroundEffectVideo"}:
         return content_type in {"video/mp4", "video/webm", "video/quicktime"}
@@ -73,8 +74,12 @@ async def upload_asset(
     kind: Annotated[str, Form(...)],
     file: Annotated[UploadFile, File(...)],
     settings = Depends(get_settings),
+    premium: Annotated[bool, Form()] = False,
     user: User = Depends(require_user),
 ) -> dict[str, Any]:
+    from app.core.premium import has_premium
+    if (premium or kind == "entryIcon") and not await has_premium(user.id):
+        raise HTTPException(403, "Premium is required for this upload.")
     if kind not in ASSET_LIMITS:
         raise HTTPException(status_code=400, detail="Unsupported asset type.")
     content_type = (file.content_type or "").lower()
@@ -92,6 +97,8 @@ async def upload_asset(
     body = await file.read(ASSET_LIMITS[kind] + 1)
     if len(body) > ASSET_LIMITS[kind]:
         raise HTTPException(status_code=413, detail="That file is too large.")
+    from app.core.upload_validation import validate_upload
+    validate_upload(kind, body, content_type)
     storage = get_r2_storage(settings)
     if not storage.enabled:
         raise HTTPException(status_code=503, detail="R2 object storage is not configured.")
@@ -328,6 +335,8 @@ async def save_my_profile(payload: dict[str, Any], user: User = Depends(require_
         existing,
         await data_api.list_user_badge_grants(user.id),
     )
+    from app.core.premium import protect_write, has_premium
+    payload = protect_write(payload, existing, await has_premium(user.id))
     display_name = str(profile.get("displayName", "")).strip()
     if not display_name:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Display name cannot be empty.")
@@ -338,6 +347,11 @@ async def save_my_profile(payload: dict[str, Any], user: User = Depends(require_
         saved = await data_api.save_profile(user.id, payload)
         from app.db import achievements
         await achievements.evaluate_user(user.id)
+        if user.username:
+            try:
+                await feature_api.archive_capture(user.id, saved, reason="profile save")
+            except Exception:
+                pass
         response_profile = saved
         if isinstance(saved, dict):
             response_profile = apply_badge_ownership(
@@ -351,3 +365,91 @@ async def save_my_profile(payload: dict[str, Any], user: User = Depends(require_
     except (HTTPError, RuntimeError, ValueError, TimeoutError, OSError):
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Profile storage is temporarily unavailable. Please try again.") from None
     return {"profile": response_profile}
+
+
+def _archive_epoch(value: str) -> int:
+    try:
+        return int(datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp())
+    except (TypeError, ValueError):
+        return 0
+
+
+def _redact_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    redacted = dict(snapshot)
+    settings = redacted.get("settings")
+    if isinstance(settings, dict):
+        capsule = settings.get("capsule")
+        if isinstance(capsule, dict):
+            capsule = dict(capsule)
+            capsule["text"] = ""
+            settings["capsule"] = capsule
+        secret = settings.get("secret")
+        if isinstance(secret, dict):
+            secret = dict(secret)
+            secret["word"] = ""
+            secret["url"] = ""
+            settings["secret"] = secret
+    return redacted
+
+
+@router.get("/me/archive")
+async def archive_list(user: User = Depends(require_user)) -> dict[str, Any]:
+    try:
+        payload = await feature_api.archive_list(user.id)
+    except Exception as ex:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Feature service is temporarily unavailable.") from ex
+    days: list[int] = []
+    for item in (payload or {}).get("archive", []):
+        if isinstance(item, dict) and item.get("created_at"):
+            days.append(_archive_epoch(str(item["created_at"])))
+    return {"days": days}
+
+
+@router.post("/me/archive/{sec}/restore")
+async def archive_restore(sec: str, user: User = Depends(require_user)) -> dict[str, Any]:
+    try:
+        target = int(sec)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Revision not found.")
+    try:
+        payload = await feature_api.archive_list(user.id)
+    except Exception as ex:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Feature service is temporarily unavailable.") from ex
+    seq = None
+    for item in (payload or {}).get("archive", []):
+        if isinstance(item, dict) and item.get("created_at"):
+            if _archive_epoch(str(item["created_at"])) == target:
+                seq = item.get("seq")
+                break
+    if seq is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Revision not found.")
+    try:
+        result = await feature_api.archive_restore(user.id, int(seq))
+        if result is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Revision not found.")
+        fetched = await feature_api.archive_get(user.id, int(seq))
+    except HTTPException:
+        raise
+    except Exception as ex:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Feature service is temporarily unavailable.") from ex
+    snapshot = (fetched or {}).get("snapshot")
+    if not isinstance(snapshot, dict):
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Revision could not be read.")
+    try:
+        saved = await data_api.save_profile(user.id, _redact_snapshot(snapshot))
+        from app.db import achievements
+        await achievements.evaluate_user(user.id)
+        response_profile = apply_badge_ownership(
+            sanitize_profile_config(saved),
+            saved,
+            await data_api.list_user_badge_grants(user.id),
+        )
+        response_profile["rank"] = await achievements.current_rank_for_user(user.id)
+    except (HTTPError, RuntimeError, ValueError, TimeoutError, OSError):
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Profile storage is temporarily unavailable. Please try again.") from None
+    return {"profile": response_profile}
+
+
+@router.post("/me/preview")
+async def preview(user: User = Depends(require_user)) -> dict[str, Any]:
+    raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail="Page preview isn't wired up yet — save and open your live page instead.")

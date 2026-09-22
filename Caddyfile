@@ -20,7 +20,6 @@ http://misa.lol, http://www.misa.lol {
 		Referrer-Policy "strict-origin-when-cross-origin"
 	}
 
-	
 	@admin_login path /admin/login /admin/login/*
 	handle @admin_login {
 		redir /admin 302
@@ -49,11 +48,65 @@ http://misa.lol, http://www.misa.lol {
 		}
 	}
 
+	# Static assets: css, js, icons, images, fonts, site.webmanifest, robots.txt
+	@static path /css/* /js/* /icons/* /images/* /fonts/* /site.webmanifest /robots.txt
+	handle @static {
+		root * /srv/templates
+		file_server
+	}
+
+	# Marketing & Auth HTML pages
+	handle /login {
+		root * /srv/templates/pages/login
+		try_files /index.html =404
+		file_server
+	}
+	handle /signup {
+		root * /srv/templates/pages/signup
+		try_files /index.html =404
+		file_server
+	}
+	handle /forgot-password {
+		root * /srv/templates/pages/forgot-password
+		try_files /index.html =404
+		file_server
+	}
+	handle /reset-password {
+		root * /srv/templates/pages/reset-password
+		try_files /index.html =404
+		file_server
+	}
+	handle /pricing {
+		redir /#pricing 307
+	}
+	handle / {
+		root * /srv/templates/pages/index
+		try_files /index.html =404
+		file_server
+	}
+
+	# FastAPI API remains authoritative during staged native rollout
+	handle /api* {
+		reverse_proxy api:8000 {
+			import tunnel_headers
+		}
+	}
+
+	# Next.js dashboard & internal routes
 	handle /dashboard* {
 		reverse_proxy frontend:3000 {
 			import tunnel_headers
 		}
 	}
+
+	# Next.js static asset bundles
+	handle /_next* {
+		reverse_proxy frontend:3000 {
+			import tunnel_headers
+		}
+	}
+
+	# Public vanity profile URLs and fallback remain on FastAPI during staged native rollout
 	handle {
 		reverse_proxy api:8000 {
 			import tunnel_headers
@@ -70,15 +123,12 @@ http://ukvhq.dev {
 		Referrer-Policy "strict-origin-when-cross-origin"
 	}
 
-	
 	handle /api* {
 		reverse_proxy api:8000 {
 			import tunnel_headers
 		}
 	}
 
-	
-	
 	handle_path /m/login* {
 		rewrite * /dashboard/admin/login
 		reverse_proxy frontend:3000 {
@@ -92,7 +142,6 @@ http://ukvhq.dev {
 		}
 	}
 
-	
 	handle /dashboard* {
 		reverse_proxy frontend:3000 {
 			import tunnel_headers

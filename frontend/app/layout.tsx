@@ -5,6 +5,7 @@ import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
 import "@fontsource/inter/700.css";
 import "./globals.css";
+import "../public/profile-layout.css";
 
 export const metadata: Metadata = {
   title: "misa.lol \u2014 I just need your name.",
