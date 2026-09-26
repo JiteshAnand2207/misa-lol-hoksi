@@ -7,7 +7,8 @@ username -> user id and applies session authorization for owner endpoints.
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from httpx import HTTPError
+from httpx import HTTPError, HTTPStatusError
+from pydantic import BaseModel, Field, StrictBool
 
 from app.api.v1.profile import require_user
 from app.core.rate_limit import client_ip
@@ -35,6 +36,16 @@ _DRAWING_ACTION_ALIASES = {
 def _proxy_errors(exc: Exception) -> HTTPException | None:
     if isinstance(exc, feature_api.DataConflict):
         return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=exc.code)
+    if isinstance(exc, HTTPStatusError):
+        upstream_status = exc.response.status_code
+        if upstream_status in {status.HTTP_400_BAD_REQUEST, status.HTTP_403_FORBIDDEN, status.HTTP_422_UNPROCESSABLE_ENTITY, status.HTTP_429_TOO_MANY_REQUESTS}:
+            try:
+                code = exc.response.json().get("error")
+            except ValueError:
+                code = None
+            if code == "FEATURE_UNAVAILABLE":
+                return HTTPException(status_code=upstream_status, detail="FEATURE_UNAVAILABLE")
+            return HTTPException(status_code=upstream_status, detail=code if isinstance(code, str) else "Feature request was rejected.")
     if isinstance(exc, HTTPError):
         return HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Feature service is temporarily unavailable.")
     return None
@@ -61,7 +72,48 @@ def _bounce(ex: Exception) -> None:
     raise ex
 
 
+class OwnerFeatureToggle(BaseModel):
+    requested_enabled: StrictBool
+    expected_version: int = Field(ge=0)
+
+
+@router.get("/policy")
+async def owner_feature_policy(user: User = Depends(require_user)):
+    """Owner-only requested/effective state. Never exposed by a public route."""
+    try:
+        result = await feature_api.owner_policy(user.id)
+    except Exception as ex:
+        _bounce(ex)
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feature policy is unavailable.")
+    return result
+
+
+@router.put("/policy/{key}")
+async def update_owner_feature_policy(key: str, payload: OwnerFeatureToggle, user: User = Depends(require_user)):
+    try:
+        result = await feature_api.set_owner_policy(
+            user.id, key,
+            requested_enabled=payload.requested_enabled,
+            expected_version=payload.expected_version,
+        )
+    except Exception as ex:
+        _bounce(ex)
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feature not found.")
+    return result
+
+
 # ----- guestbook -------------------------------------------------------------
+
+@router.get("/guestbook/inbox")
+async def guestbook_inbox(user: User = Depends(require_user)):
+    try:
+        payload = await feature_api.guestbook_inbox(user.id)
+    except Exception as ex:
+        _bounce(ex)
+    return {"entries": (payload or {}).get("entries", [])}
+
 
 @router.get("/guestbook/{username}")
 async def guestbook_public(username: str):
@@ -96,15 +148,6 @@ async def guestbook_submit(username: str, request: Request, payload: dict[str, A
     return result
 
 
-@router.get("/guestbook/inbox")
-async def guestbook_inbox(user: User = Depends(require_user)):
-    try:
-        payload = await feature_api.guestbook_inbox(user.id)
-    except Exception as ex:
-        _bounce(ex)
-    return {"entries": (payload or {}).get("entries", [])}
-
-
 @router.post("/guestbook/inbox/{entry_id}/{action}")
 async def guestbook_moderate(entry_id: str, action: str, user: User = Depends(require_user)):
     if action not in _FEATURE_OWNER_ACTIONS:
@@ -119,6 +162,15 @@ async def guestbook_moderate(entry_id: str, action: str, user: User = Depends(re
 
 
 # ----- asks ------------------------------------------------------------------
+
+@router.get("/asks/inbox")
+async def asks_inbox(user: User = Depends(require_user)):
+    try:
+        payload = await feature_api.asks_inbox(user.id)
+    except Exception as ex:
+        _bounce(ex)
+    return {"asks": (payload or {}).get("asks", [])}
+
 
 @router.get("/asks/{username}")
 async def asks_public(username: str):
@@ -153,15 +205,6 @@ async def asks_submit(username: str, request: Request, payload: dict[str, Any]):
     return result
 
 
-@router.get("/asks/inbox")
-async def asks_inbox(user: User = Depends(require_user)):
-    try:
-        payload = await feature_api.asks_inbox(user.id)
-    except Exception as ex:
-        _bounce(ex)
-    return {"asks": (payload or {}).get("asks", [])}
-
-
 @router.post("/asks/inbox/{ask_id}/{action}")
 async def asks_action(ask_id: str, action: str, request: Request, user: User = Depends(require_user)):
     if action not in _FEATURE_OWNER_ACTIONS:
@@ -180,6 +223,15 @@ async def asks_action(ask_id: str, action: str, request: Request, user: User = D
 
 
 # ----- drawings --------------------------------------------------------------
+
+@router.get("/drawings/board")
+async def drawings_board(user: User = Depends(require_user)):
+    try:
+        payload = await feature_api.drawings_board(user.id)
+    except Exception as ex:
+        _bounce(ex)
+    return {"drawings": (payload or {}).get("drawings", [])}
+
 
 @router.get("/drawings/{username}")
 async def drawings_public(username: str):
@@ -214,15 +266,6 @@ async def drawings_submit(username: str, payload: dict[str, Any]):
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found.")
     return result
-
-
-@router.get("/drawings/board")
-async def drawings_board(user: User = Depends(require_user)):
-    try:
-        payload = await feature_api.drawings_board(user.id)
-    except Exception as ex:
-        _bounce(ex)
-    return {"drawings": (payload or {}).get("drawings", [])}
 
 
 @router.post("/drawings/{entry_id}/{action}")

@@ -41,7 +41,7 @@ pub async fn view(
 ) -> ApiResult {
     let config = read_config(&pool, &user_id).await;
     let settings = settings_of(config.as_ref());
-    if !feature_enabled(&settings, "night") {
+    if !super::policy::is_effective(&pool, user_id, "night_shift").await.unwrap_or(false) {
         return Err(err(StatusCode::NOT_FOUND, "feature_off"));
     }
     let night_cfg = settings.get("night").cloned().unwrap_or_else(|| json!({}));

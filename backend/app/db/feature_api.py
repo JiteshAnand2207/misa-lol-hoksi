@@ -15,10 +15,31 @@ async def _features(method: str, user_id: str, path: str = "", **kwargs: Any) ->
     return await _request(method, f"/v1/features/{user_id}/{path}".rstrip("/"), **kwargs)
 
 
+# Shared feature policy. The Rust data API is the sole policy store and evaluator;
+# callers of these functions must authenticate the owner or staff member first.
+async def owner_policy(user_id: str) -> dict | None:
+    return await _features("GET", user_id, "policy")
+
+
+async def set_owner_policy(user_id: str, key: str, *, requested_enabled: bool, expected_version: int) -> dict | None:
+    return await _features(
+        "PUT", user_id, f"policy/{key}",
+        json={"requested_enabled": requested_enabled, "expected_version": expected_version},
+    )
+
+
+async def policy_catalog() -> dict | None:
+    return await _request("GET", "/v1/feature-policies")
+
+
+async def set_catalog_policy(key: str, payload: dict[str, Any]) -> dict | None:
+    return await _request("PUT", f"/v1/feature-policies/{key}", json=payload)
+
+
 # ----- guestbook -------------------------------------------------------------
 
 async def guestbook_submit(user_id: str, *, name: str, message: str, ip: str) -> dict | None:
-    return await _features("POST", user_id, "guestbook", json={"name": name, "message": message, "ip": ip})
+    return await _features("POST", user_id, "guestbook", json={"display_name": name, "message": message, "ip": ip})
 
 
 async def guestbook_list(user_id: str) -> dict | None:

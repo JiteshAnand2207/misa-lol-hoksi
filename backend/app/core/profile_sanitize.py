@@ -135,14 +135,26 @@ def public_profile_payload(config: dict[str, Any]) -> dict[str, Any]:
     settings = config.get("settings") if isinstance(config.get("settings"), dict) else {}
     assets = config.get("assets") if isinstance(config.get("assets"), dict) else {}
     profile = config.get("profile") if isinstance(config.get("profile"), dict) else {}
+    socials = config.get("socials") if isinstance(config.get("socials"), list) else []
+    widgets = config.get("widgets") if isinstance(config.get("widgets"), list) else []
+    sections = config.get("sections") if isinstance(config.get("sections"), list) else []
+    public_sections = []
+    for section in sections:
+        if not isinstance(section, dict) or section.get("enabled") is not True:
+            continue
+        visible = dict(section)
+        for side in ("leftCard", "rightCard"):
+            if not isinstance(visible.get(side), dict) or visible[side].get("enabled") is not True:
+                visible.pop(side, None)
+        public_sections.append(visible)
     result = {
         "profile": {key: profile[key] for key in ("username", "displayName", "description", "location", "views", "uid", "joinedAt") if key in profile},
         "settings": {key: value for key, value in settings.items() if key in PUBLIC_PROFILE_SETTINGS},
         "assets": {key: value for key, value in assets.items() if key in PUBLIC_PROFILE_ASSETS},
-        "socials": config.get("socials") if isinstance(config.get("socials"), list) else [],
+        "socials": [item for item in socials if isinstance(item, dict) and item.get("enabled") is True] if settings.get("showSocials") is not False else [],
         "badges": config.get("badges") if isinstance(config.get("badges"), list) else [],
-        "widgets": config.get("widgets") if isinstance(config.get("widgets"), list) else [],
-        "sections": config.get("sections") if isinstance(config.get("sections"), list) else [],
+        "widgets": [item for item in widgets if isinstance(item, dict) and item.get("enabled") is True],
+        "sections": public_sections,
     }
     for key in ("rank", "discord"):
         if key in config:

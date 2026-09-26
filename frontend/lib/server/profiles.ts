@@ -34,16 +34,26 @@ function publicProfilePayload(config: Record<string, unknown>): Record<string, u
   const settings = object(config.settings);
   const assets = object(config.assets);
   const profile = object(config.profile);
+  const socials = Array.isArray(config.socials) ? config.socials : [];
+  const widgets = Array.isArray(config.widgets) ? config.widgets : [];
+  const sections = Array.isArray(config.sections) ? config.sections : [];
+  const publicSections = sections.filter((item) => object(item).enabled === true).map((item) => {
+    const visible = object(item);
+    for (const side of ["leftCard", "rightCard"] as const) {
+      if (object(visible[side]).enabled !== true) delete visible[side];
+    }
+    return visible;
+  });
   const identity = Object.fromEntries(Object.entries(profile).filter(([key]) =>
     ["username", "displayName", "description", "location", "views", "uid", "joinedAt"].includes(key)));
   const result: Record<string, unknown> = {
     profile: identity,
     settings: Object.fromEntries(Object.entries(settings).filter(([key]) => PUBLIC_SETTINGS.has(key))),
     assets: Object.fromEntries(Object.entries(assets).filter(([key]) => PUBLIC_ASSETS.has(key))),
-    socials: Array.isArray(config.socials) ? config.socials : [],
+    socials: settings.showSocials === false ? [] : socials.filter((item) => object(item).enabled === true),
     badges: Array.isArray(config.badges) ? config.badges : [],
-    widgets: Array.isArray(config.widgets) ? config.widgets : [],
-    sections: Array.isArray(config.sections) ? config.sections : [],
+    widgets: widgets.filter((item) => object(item).enabled === true),
+    sections: publicSections,
   };
   if (config.rank) result.rank = config.rank;
   if (config.discord) result.discord = config.discord;

@@ -10,16 +10,18 @@ pub mod hits;
 pub mod moon;
 pub mod neighbours;
 pub mod night;
+pub mod policy;
 pub mod reverse;
 pub mod schema;
 pub mod secret;
 pub mod tally;
 
 use crate::api::AppState;
+use axum::middleware;
 use axum::routing::{get, post};
 use axum::Router;
 
-pub fn router() -> Router<AppState> {
+pub fn router(state: AppState) -> Router<AppState> {
     Router::new()
         .route(
             "/v1/features/{user_id}/guestbook",
@@ -193,4 +195,6 @@ pub fn router() -> Router<AppState> {
             "/v1/features/{user_id}/reverse",
             get(reverse::get).put(reverse::set),
         )
+        .route_layer(middleware::from_fn_with_state(state, policy::require_public_policy))
+        .merge(policy::router())
 }

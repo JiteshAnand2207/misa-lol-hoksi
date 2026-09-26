@@ -46,19 +46,6 @@ pub fn settings_of(config: Option<&Value>) -> Value {
         .unwrap_or_else(|| json!({}))
 }
 
-/// Feature switch check: `settings.<key>` present and truthy-ish.
-/// Accepts bool true or a non-empty object/array (e.g. `tally: {q,options}`).
-pub fn feature_enabled(settings: &Value, key: &str) -> bool {
-    match settings.get(key) {
-        None => false,
-        Some(Value::Bool(b)) => *b,
-        Some(Value::Null) => false,
-        Some(Value::Object(map)) => !map.is_empty(),
-        Some(Value::Array(arr)) => !arr.is_empty(),
-        Some(Value::Number(_)) | Some(Value::String(_)) => true,
-    }
-}
-
 pub async fn get_aux(pool: &PgPool, user_id: &uuid::Uuid, feature: &str) -> Value {
     let row: Option<(sqlx::types::Json<Value>,)> = sqlx::query_as(
         "SELECT state FROM feature_aux WHERE user_id = $1 AND feature = $2",

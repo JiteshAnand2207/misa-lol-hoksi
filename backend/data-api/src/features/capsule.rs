@@ -1,96 +1,135 @@
 use super::helpers::*;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
 use sqlx::PgPool;
 use uuid::Uuid;
 
 pub const BODY_MAX: usize = 5000;
 
-async fn config_values(pool: &PgPool, user_id: &Uuid) -> (bool, Option<Value>) {
-    let config = read_config(pool, user_id).await;
-    let settings = settings_of(config.as_ref());
-    let enabled = feature_enabled(&settings, "capsule");
-    let cfg = settings.get("capsule").cloned().unwrap_or_else(|| json!({}));
-    (enabled, Some(cfg))
+/// Render only the explicitly published snapshot. A prior openedAt marker
+/// never overrides the release timestamp of the current publication.
+fn public_payload(
+    now: DateTime<Utc>,
+    label: &str,
+    at: &str,
+    body: &str,
+    opened_at: Option<&str>,
+) -> (Value, bool) {
+    let release = DateTime::parse_from_rfc3339(at).ok().map(|time| time.with_timezone(&Utc));
+    let Some(release) = release else {
+        return (json!({ "state": "sealed", "label": label, "at": at, "body": null, "raised": false }), false);
+    };
+    if now < release {
+        return (json!({ "state": "sealed", "label": label, "at": at, "body": null, "raised": false }), false);
+    }
+    let prior_open = opened_at
+        .and_then(|value| DateTime::parse_from_rfc3339(value).ok())
+        .map(|time| time.with_timezone(&Utc))
+        .filter(|time| time >= &release && time <= &now);
+    let already_open = prior_open.is_some();
+    let opened = prior_open.unwrap_or(now);
+    (json!({
+        "state": "open",
+        "label": label,
+        "opened_at": opened.to_rfc3339(),
+        "body": body,
+        "raised": already_open,
+    }), !already_open)
 }
 
-pub async fn public_view(
-    State(pool): State<PgPool>,
-    Path(user_id): Path<Uuid>,
-) -> ApiResult {
-    let (enabled, cfg) = config_values(&pool, &user_id).await;
-    if !enabled {
+pub async fn public_view(State(pool): State<PgPool>, Path(user_id): Path<Uuid>) -> ApiResult {
+    if !super::policy::is_effective(&pool, user_id, "time_capsule").await.unwrap_or(false) {
         return Err(err(StatusCode::NOT_FOUND, "feature_off"));
     }
-    // A saved draft must never become public merely because its release time
-    // has passed. Publish/unpublish is a separate owner action.
-    if get_aux(&pool, &user_id, "capsule_published").await != json!(1) {
+    let published = get_aux(&pool, &user_id, "capsule_publication").await;
+    if published.get("published").and_then(Value::as_bool) != Some(true) {
         return Err(err(StatusCode::NOT_FOUND, "feature_off"));
     }
-    let cfg = cfg.unwrap_or_else(|| json!({}));
-    let label = cfg.get("label").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let at = cfg.get("at").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let body_text = cfg.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string();
-
-    let state = get_aux(&pool, &user_id, "capsule_open").await;
-    let opened_at = state.get("openedAt").and_then(|v| v.as_str());
-
-    let now = chrono::Utc::now();
-    let release = chrono::DateTime::parse_from_rfc3339(&at).ok();
-    let due = release.map(|r| now >= r.with_timezone(&chrono::Utc)).unwrap_or(false);
-
-    if let Some(opened) = opened_at {
-        let _ = opened;
-        // already opened → reveal
-        ok(json!({
-            "state": "open",
-            "label": label,
-            "opened_at": opened_at,
-            "body": body_text,
-            "raised": opened_at.is_some(),
-        }))
-    } else if due {
-        // first open after release: record it, reveal body
-        set_aux(&pool, &user_id, "capsule_open", &json!({"openedAt": now.to_rfc3339()})).await;
-        ok(json!({
-            "state": "open",
-            "label": label,
-            "opened_at": now.to_rfc3339(),
-            "body": body_text,
-            "raised": false,
-        }))
-    } else {
-        // sealed
-        ok(json!({
-            "state": "sealed",
-            "label": label,
-            "at": at,
-            "raised": false,
-            "body": null,
-        }))
+    let label = published.get("label").and_then(Value::as_str).unwrap_or("");
+    let at = published.get("at").and_then(Value::as_str).unwrap_or("");
+    let body = published.get("text").and_then(Value::as_str).unwrap_or("");
+    let opened = get_aux(&pool, &user_id, "capsule_open").await;
+    let (payload, newly_opened) = public_payload(
+        Utc::now(), label, at, body, opened.get("openedAt").and_then(Value::as_str),
+    );
+    if newly_opened {
+        if let Some(opened_at) = payload.get("opened_at") {
+            set_aux(&pool, &user_id, "capsule_open", &json!({"openedAt": opened_at})).await;
+        }
     }
+    ok(payload)
 }
 
-pub async fn publish(
-    State(pool): State<PgPool>,
-    Path(user_id): Path<Uuid>,
-) -> ApiResult {
-    let cfg = read_config(&pool, &user_id).await;
-    let settings = settings_of(cfg.as_ref());
+pub async fn publish(State(pool): State<PgPool>, Path(user_id): Path<Uuid>) -> ApiResult {
+    let Some(config) = read_config(&pool, &user_id).await else {
+        return Err(err(StatusCode::NOT_FOUND, "profile_not_found"));
+    };
+    let settings = settings_of(Some(&config));
     let capsule = settings.get("capsule").cloned().unwrap_or_else(|| json!({}));
-    let body = capsule.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    if body.chars().count() > BODY_MAX {
-        return Err(err_reason(StatusCode::UNPROCESSABLE_ENTITY, "payload_too_large", "Capsule body too large."));
+    let body = capsule.get("text").and_then(Value::as_str).unwrap_or("");
+    let at = capsule.get("at").and_then(Value::as_str).unwrap_or("");
+    let label = capsule.get("label").and_then(Value::as_str).unwrap_or("");
+    if body.trim().is_empty() || body.chars().count() > BODY_MAX || DateTime::parse_from_rfc3339(at).is_err() {
+        return Err(err(StatusCode::UNPROCESSABLE_ENTITY, "invalid_capsule"));
     }
-    set_aux(&pool, &user_id, "capsule_published", &json!(1)).await;
-    ok(json!({ "ok": true, "state": "sealed" }))
+    let snapshot = json!({ "published": true, "text": body, "at": at, "label": label });
+    let mut tx = pool.begin().await.map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, "store_error"))?;
+    sqlx::query(
+        "INSERT INTO feature_aux (user_id, feature, state, updated_at)
+         VALUES ($1,'capsule_publication',$2,NOW())
+         ON CONFLICT (user_id,feature) DO UPDATE
+         SET state=EXCLUDED.state, updated_at=NOW()",
+    ).bind(user_id).bind(sqlx::types::Json(snapshot))
+        .execute(&mut *tx).await.map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, "store_error"))?;
+    // Reset the opened marker in the same transaction. A previous capsule
+    // cannot grant early access to a newly scheduled body.
+    sqlx::query(
+        "INSERT INTO feature_aux (user_id, feature, state, updated_at)
+         VALUES ($1,'capsule_open','{}'::jsonb,NOW())
+         ON CONFLICT (user_id,feature) DO UPDATE
+         SET state='{}'::jsonb, updated_at=NOW()",
+    ).bind(user_id).execute(&mut *tx).await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, "store_error"))?;
+    tx.commit().await.map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, "store_error"))?;
+    ok(json!({ "ok": true, "state": "published" }))
 }
 
-pub async fn unpublish(
-    State(pool): State<PgPool>,
-    Path(user_id): Path<Uuid>,
-) -> ApiResult {
-    set_aux(&pool, &user_id, "capsule_published", &json!(0)).await;
+pub async fn unpublish(State(pool): State<PgPool>, Path(user_id): Path<Uuid>) -> ApiResult {
+    sqlx::query(
+        "UPDATE feature_aux SET state=jsonb_set(state,'{published}','false'::jsonb,true), updated_at=NOW()
+         WHERE user_id=$1 AND feature='capsule_publication'",
+    ).bind(user_id).execute(&pool).await
+        .map_err(|_| err(StatusCode::INTERNAL_SERVER_ERROR, "store_error"))?;
     ok(json!({ "ok": true, "state": "unpublished" }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stale_open_marker_cannot_unseal_a_future_publication() {
+        let now = DateTime::parse_from_rfc3339("2026-09-26T12:00:00Z").unwrap().with_timezone(&Utc);
+        let (payload, opened) = public_payload(
+            now, "new label", "2026-10-01T00:00:00Z", "new private body",
+            Some("2026-09-01T00:00:00Z"),
+        );
+        assert_eq!(payload.get("state"), Some(&json!("sealed")));
+        assert_eq!(payload.get("body"), Some(&Value::Null));
+        assert!(!opened);
+    }
+
+    #[test]
+    fn current_release_opens_without_reusing_an_old_marker() {
+        let now = DateTime::parse_from_rfc3339("2026-10-01T00:00:00Z").unwrap().with_timezone(&Utc);
+        let (payload, opened) = public_payload(
+            now, "label", "2026-10-01T00:00:00Z", "new body",
+            Some("2026-09-01T00:00:00Z"),
+        );
+        assert_eq!(payload.get("body"), Some(&json!("new body")));
+        assert_eq!(payload.get("raised"), Some(&json!(false)));
+        assert!(opened);
+    }
 }

@@ -37,7 +37,7 @@ pub async fn view(
 ) -> ApiResult {
     let config = read_config(&pool, &user_id).await;
     let settings = settings_of(config.as_ref());
-    if !feature_enabled(&settings, "moon") {
+    if !super::policy::is_effective(&pool, user_id, "moon").await.unwrap_or(false) {
         return Err(err(StatusCode::NOT_FOUND, "feature_off"));
     }
     let hemisphere = settings

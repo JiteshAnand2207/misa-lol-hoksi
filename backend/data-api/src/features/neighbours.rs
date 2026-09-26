@@ -15,12 +15,7 @@ pub struct Nominate {
 }
 
 async fn enabled(pool: &PgPool, user_id: &Uuid) -> bool {
-    let settings = settings_of(read_config(pool, user_id).await.as_ref());
-    feature_enabled(&settings, "neighbours")
-      && settings
-          .get("neighbours")
-          .and_then(|v| v.as_bool())
-          .unwrap_or(true)
+    super::policy::is_effective(pool, *user_id, "neighbours").await.unwrap_or(false)
 }
 
 async fn user_id_of(pool: &PgPool, username: &str) -> Option<Uuid> {
@@ -126,6 +121,10 @@ pub async fn owner_view(
 async fn is_mutual(pool: &PgPool, user_id: &Uuid, to: &str) -> Option<bool> {
     // reciprocal edge: the target user must be a real user that nominated user_id back
     let to_id = user_id_of(pool, to).await?;
+    // Reciprocity cannot keep a disabled or suspended target visible.
+    if !super::policy::is_effective(pool, to_id, "neighbours").await.unwrap_or(false) {
+        return Some(false);
+    }
     sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM feature_neighbours WHERE from_user_id=$1 AND to_user_id=$2)",
     )

@@ -5,15 +5,16 @@ import { useEffect, useRef, useState } from "react";
 import { Ban, Database, Flag, KeyRound, Orbit, Search, ShieldCheck, ShieldOff, Type, Upload, Users } from "lucide-react";
 import { Button, FieldLabel, Modal, PageHeader, SectionTitle, TextInput } from "@/components/ui";
 import { AchievementAdmin } from "@/components/admin/AchievementAdmin";
+import { FeaturePoliciesPanel } from "@/components/admin/FeaturePoliciesPanel";
 import { useT } from "@/lib/i18n";
 import { assetFromFile } from "@/lib/profile-store";
 import { FONT_ACCEPT } from "@/lib/typography";
 
-type Tab = "users" | "bans" | "reserved" | "banned" | "badges" | "premium" | "reports" | "flags" | "bakaboost" | "themes" | "templates" | "fonts" | "audit" | "staff" | "roles" | "constellations";
+type Tab = "users" | "bans" | "reserved" | "banned" | "badges" | "premium" | "reports" | "flags" | "features" | "bakaboost" | "themes" | "templates" | "fonts" | "audit" | "staff" | "roles" | "constellations";
 type StaffRole = "owner" | "admin" | "moderator";
 type AdminSession = { id: string; email: string; name: string; role: string; permissions: Record<string, boolean>; status: string; suspended: boolean };
-const SECTION_TABS: Tab[] = ["users", "constellations", "bans", "reserved", "banned", "badges", "premium", "reports", "flags", "bakaboost", "themes", "templates", "fonts", "audit"];
-const tabs: Array<[Tab, string]> = [["users", "Users"], ["constellations", "Constellations"], ["bans", "Bans"], ["reserved", "Reserved names"], ["banned", "Banned words"], ["badges", "Badges"], ["premium", "Premium"], ["reports", "Reports"], ["flags", "Feature flags"], ["bakaboost", "BakaBoost"], ["themes", "Themes"], ["templates", "Templates"], ["fonts", "Default fonts"], ["audit", "Audit logs"], ["staff", "Staff"], ["roles", "Roles"]];
+const SECTION_TABS: Tab[] = ["users", "constellations", "bans", "reserved", "banned", "badges", "premium", "reports", "flags", "features", "bakaboost", "themes", "templates", "fonts", "audit"];
+const tabs: Array<[Tab, string]> = [["users", "Users"], ["constellations", "Constellations"], ["bans", "Bans"], ["reserved", "Reserved names"], ["banned", "Banned words"], ["badges", "Badges"], ["premium", "Premium"], ["reports", "Reports"], ["flags", "Feature flags"], ["features", "Feature catalogue"], ["bakaboost", "BakaBoost"], ["themes", "Themes"], ["templates", "Templates"], ["fonts", "Default fonts"], ["audit", "Audit logs"], ["staff", "Staff"], ["roles", "Roles"]];
 
 function adminLoginPath(): string {
   const host = window.location.hostname;
@@ -35,7 +36,7 @@ export function AdminView() {
   const [role, setRole] = useState<StaffRole | null>(null);
   const [sections, setSections] = useState<Tab[]>(SECTION_TABS);
   const [accessReady, setAccessReady] = useState(false);
-  const tabLabel: Record<Tab, string> = { users: t("admin.users"), constellations: "Constellations", bans: t("admin.bans"), reserved: t("admin.reserved"), banned: t("admin.banned"), badges: t("admin.badges"), premium: t("admin.premium"), reports: t("admin.reports"), flags: t("admin.flags"), bakaboost: t("admin.bakaboost"), themes: t("admin.themes"), templates: t("admin.templates"), fonts: "Default fonts", audit: t("admin.audit"), staff: t("admin.staff"), roles: t("admin.roles") };
+  const tabLabel: Record<Tab, string> = { users: t("admin.users"), constellations: "Constellations", bans: t("admin.bans"), reserved: t("admin.reserved"), banned: t("admin.banned"), badges: t("admin.badges"), premium: t("admin.premium"), reports: t("admin.reports"), flags: t("admin.flags"), features: "Feature catalogue", bakaboost: t("admin.bakaboost"), themes: t("admin.themes"), templates: t("admin.templates"), fonts: "Default fonts", audit: t("admin.audit"), staff: t("admin.staff"), roles: t("admin.roles") };
   useEffect(() => {
     let cancelled = false;
     void fetch("/api/v1/admin-auth/session", { credentials: "include", cache: "no-store", headers: { "Cache-Control": "no-store" } })
@@ -77,7 +78,7 @@ export function AdminView() {
     if (!visible.some(([id]) => id === tab)) setTab(visible[0][0]);
   }, [accessReady, tab, visible]);
   if (!adminReady || !admin) return <main className="mx-auto max-w-[1200px] px-5 py-12 text-zinc-500">{t("admin.loading")}</main>;
-  return <main className="mx-auto min-h-screen max-w-[1400px] px-5 py-8 sm:px-8 sm:py-11 xl:px-12"><PageHeader eyebrow={t("admin.eyebrow")} title={t("admin.title")} description={t("admin.description")} /><div className="mb-8 flex flex-wrap gap-2">{visible.map(([id]) => <button key={id} type="button" onClick={() => setTab(id)} className={`rounded-xl border px-3 py-2 text-xs ${tab === id ? "border-[#e11d48]/50 bg-[#e11d48]/15 text-white" : "border-white/[.08] text-zinc-500 hover:text-white"}`}>{tabLabel[id]}</button>)}</div>{tab === "users" && <UsersPanel staffRole={role} />}{tab === "constellations" && <ConstellationsPanel staffRole={role} />}{tab === "bans" && <BansPanel />}{tab === "reserved" && <ReservedPanel />}{tab === "banned" && <BannedPanel />}{tab === "badges" && <AchievementAdmin />}{tab === "premium" && <PremiumPanel />}{tab === "reports" && <ReportsPanel />}{tab === "flags" && <FlagsPanel />}{tab === "bakaboost" && <BakaBoostPanel />}{tab === "themes" && <ThemesPanel />}{tab === "templates" && <TemplatesPanel />}{tab === "fonts" && <DefaultFontsPanel />}{tab === "audit" && <AuditPanel />}{tab === "staff" && (role === "owner" || role === "admin") && <StaffPanel staffRole={role} />}{tab === "roles" && role === "owner" && <RolesPanel />}</main>;
+  return <main className="mx-auto min-h-screen max-w-[1400px] px-5 py-8 sm:px-8 sm:py-11 xl:px-12"><PageHeader eyebrow={t("admin.eyebrow")} title={t("admin.title")} description={t("admin.description")} /><div className="mb-8 flex flex-wrap gap-2">{visible.map(([id]) => <button key={id} type="button" onClick={() => setTab(id)} className={`rounded-xl border px-3 py-2 text-xs ${tab === id ? "border-[#e11d48]/50 bg-[#e11d48]/15 text-white" : "border-white/[.08] text-zinc-500 hover:text-white"}`}>{tabLabel[id]}</button>)}</div>{tab === "users" && <UsersPanel staffRole={role} />}{tab === "constellations" && <ConstellationsPanel staffRole={role} />}{tab === "bans" && <BansPanel />}{tab === "reserved" && <ReservedPanel />}{tab === "banned" && <BannedPanel />}{tab === "badges" && <AchievementAdmin />}{tab === "premium" && <PremiumPanel />}{tab === "reports" && <ReportsPanel />}{tab === "flags" && <FlagsPanel />}{tab === "features" && <FeaturePoliciesPanel canEdit={role === "owner" || role === "admin"} />}{tab === "bakaboost" && <BakaBoostPanel />}{tab === "themes" && <ThemesPanel />}{tab === "templates" && <TemplatesPanel />}{tab === "fonts" && <DefaultFontsPanel />}{tab === "audit" && <AuditPanel />}{tab === "staff" && (role === "owner" || role === "admin") && <StaffPanel staffRole={role} />}{tab === "roles" && role === "owner" && <RolesPanel />}</main>;
 }
 
 function UsersPanel({ staffRole }: { staffRole: StaffRole | null }) {
@@ -149,7 +150,7 @@ function StaffPanel({ staffRole }: { staffRole: StaffRole }) {
 
 function RolesPanel() {
   const t = useT();
-  const labels: Record<string, string> = { users: t("admin.users"), constellations: "Constellations", bans: t("admin.bans"), reserved: t("admin.reserved"), banned: t("admin.banned"), badges: t("admin.badges"), premium: t("admin.premium"), reports: t("admin.reports"), flags: t("admin.flags"), bakaboost: t("admin.bakaboost"), themes: t("admin.themes"), templates: t("admin.templates"), audit: t("admin.audit") };
+  const labels: Record<string, string> = { users: t("admin.users"), constellations: "Constellations", bans: t("admin.bans"), reserved: t("admin.reserved"), banned: t("admin.banned"), badges: t("admin.badges"), premium: t("admin.premium"), reports: t("admin.reports"), flags: t("admin.flags"), features: "Feature catalogue", bakaboost: t("admin.bakaboost"), themes: t("admin.themes"), templates: t("admin.templates"), audit: t("admin.audit") };
   const empty = { admin: Object.fromEntries(SECTION_TABS.map((id) => [id, true])), moderator: Object.fromEntries(SECTION_TABS.map((id) => [id, true])) };
   const [access, setAccess] = useState<Record<string, Record<string, boolean>>>(empty);
   const [error, setError] = useState("");

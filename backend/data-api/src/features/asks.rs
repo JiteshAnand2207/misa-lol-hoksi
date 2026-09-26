@@ -24,8 +24,7 @@ pub struct Submit {
 }
 
 async fn enabled(pool: &PgPool, user_id: &Uuid) -> bool {
-    let settings = settings_of(read_config(pool, user_id).await.as_ref());
-    feature_enabled(&settings, "asks")
+    super::policy::is_effective(pool, *user_id, "ask_anything").await.unwrap_or(false)
 }
 
 pub async fn submit(

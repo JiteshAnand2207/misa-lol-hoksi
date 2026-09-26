@@ -1,16 +1,18 @@
 from datetime import datetime
 from typing import Annotated
 from uuid import UUID
+from typing import Literal
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel, Field
+from httpx import HTTPError, HTTPStatusError
+from pydantic import BaseModel, Field, StrictBool
 
 from app.core.config import Settings, get_settings
 from app.core.security import normalize_banned_word, normalize_ip
 from app.core.profile_sanitize import HEX_COLOR, css_hex_color, decode_data_url, is_safe_social_icon
 from app.core.sessions import revoke_all_sessions
-from app.db import admin_db
+from app.db import admin_db, feature_api
 from app.db.admin_db import STAFF_ROLES, STAFF_SECTIONS
 from app.models import User
 from app.api.v1.admin_auth import require_admin_session
@@ -40,6 +42,7 @@ def section_for_admin_path(path: str) -> str | None:
         ("/entitlements", "premium"),
         ("/reports", "reports"),
         ("/feature-flags", "flags"),
+        ("/feature-policies", "features"),
         ("/bakaboost", "bakaboost"),
         ("/themes", "themes"),
         ("/templates", "templates"),
@@ -535,6 +538,47 @@ async def update_report(report_id: UUID, payload: ReportRequest, admin: AdminUse
 @router.get("/feature-flags")
 async def feature_flags(_admin: AdminUser) -> dict:
     return {"flags": await admin_db.list_flags()}
+
+
+class FeaturePolicyUpdate(BaseModel):
+    globally_enabled: StrictBool
+    eligible_plans: list[Literal["free", "lifetime", "supporter"]]
+    rollout_percent: int = Field(ge=0, le=100)
+    default_enabled: StrictBool
+    expected_version: int = Field(ge=0)
+    reason: str = Field(default="", max_length=500)
+
+
+@router.get("/feature-policies")
+async def feature_policies(_admin: AdminUser) -> dict:
+    try:
+        result = await feature_api.policy_catalog()
+    except HTTPError:
+        raise HTTPException(status_code=502, detail="Feature policy service is temporarily unavailable.")
+    if result is None:
+        raise HTTPException(status_code=404, detail="Feature policy catalogue is unavailable.")
+    return result
+
+
+@router.put("/feature-policies/{key}")
+async def update_feature_policy(key: str, payload: FeaturePolicyUpdate, admin: AdminUser, request: Request) -> dict:
+    if request.state.staff_role not in {"owner", "admin"}:
+        raise HTTPException(status_code=403, detail="Feature policy changes require admin access.")
+    try:
+        result = await feature_api.set_catalog_policy(
+            key, {**payload.model_dump(exclude={"reason"}), "actor_id": admin.id, "reason": payload.reason}
+        )
+    except feature_api.DataConflict as ex:
+        raise HTTPException(status_code=409, detail=ex.code)
+    except HTTPStatusError as ex:
+        if ex.response.status_code == 422:
+            raise HTTPException(status_code=422, detail="Invalid feature policy.")
+        raise HTTPException(status_code=502, detail="Feature policy service is temporarily unavailable.")
+    except HTTPError:
+        raise HTTPException(status_code=502, detail="Feature policy service is temporarily unavailable.")
+    if result is None:
+        raise HTTPException(status_code=404, detail="Feature not found.")
+    return result
 
 
 @router.put("/feature-flags/{key}")

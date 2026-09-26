@@ -3,6 +3,47 @@ use sqlx::PgPool;
 
 pub async fn registers(pool: &PgPool) -> Result<()> {
     for statement in [
+        "CREATE TABLE IF NOT EXISTS feature_policies (
+            key VARCHAR(48) PRIMARY KEY,
+            globally_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+            eligible_plans TEXT[] NOT NULL DEFAULT ARRAY['free']::text[],
+            rollout_percent INTEGER NOT NULL DEFAULT 0 CHECK (rollout_percent BETWEEN 0 AND 100),
+            default_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+            version INTEGER NOT NULL DEFAULT 1,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )",
+        "CREATE TABLE IF NOT EXISTS feature_page_states (
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            feature_key VARCHAR(48) NOT NULL REFERENCES feature_policies(key),
+            requested_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+            version INTEGER NOT NULL DEFAULT 1,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (user_id, feature_key)
+        )",
+        "CREATE INDEX IF NOT EXISTS feature_page_states_enabled_idx ON feature_page_states (feature_key) WHERE requested_enabled",
+        "CREATE TABLE IF NOT EXISTS feature_page_overrides (
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            feature_key VARCHAR(48) NOT NULL REFERENCES feature_policies(key),
+            granted BOOLEAN NOT NULL DEFAULT FALSE,
+            restricted BOOLEAN NOT NULL DEFAULT FALSE,
+            reason TEXT NOT NULL,
+            expires_at TIMESTAMPTZ,
+            version INTEGER NOT NULL DEFAULT 1,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (user_id, feature_key)
+        )",
+        "CREATE TABLE IF NOT EXISTS feature_policy_audit (
+            id BIGSERIAL PRIMARY KEY,
+            actor_id UUID,
+            scope VARCHAR(16) NOT NULL,
+            user_id UUID,
+            feature_key VARCHAR(48) NOT NULL,
+            before_state JSONB NOT NULL,
+            after_state JSONB NOT NULL,
+            reason TEXT NOT NULL DEFAULT '',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )",
+        "CREATE INDEX IF NOT EXISTS feature_policy_audit_key_time_idx ON feature_policy_audit (feature_key, created_at DESC)",
         "CREATE TABLE IF NOT EXISTS feature_rates (
             user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             scope VARCHAR(48) NOT NULL,
@@ -140,5 +181,26 @@ pub async fn registers(pool: &PgPool) -> Result<()> {
     ] {
         sqlx::query(statement).execute(pool).await?;
     }
+    super::policy::seed_catalogue(pool).await?;
+    // Existing accounts intentionally receive no rows and therefore remain
+    // requested-off. Only accounts created after this migration inherit admin
+    // defaults; those defaults still pass every effective policy check.
+    sqlx::query(
+        "CREATE OR REPLACE FUNCTION feature_initial_page_states() RETURNS trigger AS $$
+         BEGIN
+           INSERT INTO feature_page_states (user_id, feature_key, requested_enabled)
+           SELECT NEW.id, key, default_enabled FROM feature_policies;
+           RETURN NEW;
+         END;
+         $$ LANGUAGE plpgsql",
+    ).execute(pool).await?;
+    sqlx::query(
+        "DO $$ BEGIN
+           IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='feature_initial_page_states_trigger') THEN
+             CREATE TRIGGER feature_initial_page_states_trigger AFTER INSERT ON users
+             FOR EACH ROW EXECUTE FUNCTION feature_initial_page_states();
+           END IF;
+         END $$",
+    ).execute(pool).await?;
     Ok(())
 }

@@ -29,7 +29,7 @@ pub struct ListQuery {
 
 async fn config_values(pool: &PgPool, user_id: &Uuid) -> (bool, bool, bool) {
     let settings = settings_of(read_config(pool, user_id).await.as_ref());
-    let enabled = feature_enabled(&settings, "guestbook");
+    let enabled = super::policy::is_effective(pool, *user_id, "guestbook").await.unwrap_or(false);
     let paused = settings
         .get("guestbookPaused")
         .and_then(|v| v.as_bool())

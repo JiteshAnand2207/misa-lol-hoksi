@@ -19,6 +19,7 @@ STAFF_SECTIONS = (
     "premium",
     "reports",
     "flags",
+    "features",
     "bakaboost",
     "themes",
     "templates",
