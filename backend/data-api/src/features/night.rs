@@ -26,7 +26,7 @@ fn parse_hhmm(value: Option<&serde_json::Value>, def: u32) -> u32 {
 
 fn in_window(minutes: u32, start: u32, end: u32) -> bool {
     if start == end {
-        return minutes == start;
+        return false;
     }
     if start < end {
         minutes >= start && minutes < end
@@ -67,4 +67,18 @@ pub async fn view(
         "to": format!("{:02}:{:02}", end / 60, end % 60),
         "local": local.to_rfc3339(),
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::in_window;
+
+    #[test]
+    fn overnight_window_has_exact_boundaries_and_equal_times_are_closed() {
+        assert!(!in_window(22 * 60 + 59, 23 * 60, 5 * 60));
+        assert!(in_window(23 * 60, 23 * 60, 5 * 60));
+        assert!(in_window(4 * 60 + 59, 23 * 60, 5 * 60));
+        assert!(!in_window(5 * 60, 23 * 60, 5 * 60));
+        assert!(!in_window(23 * 60, 23 * 60, 23 * 60));
+    }
 }

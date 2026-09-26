@@ -1,6 +1,6 @@
 from typing import Any
 
-from app.core.profile_sanitize import apply_badge_ownership, sanitize_profile_config
+from app.core.profile_sanitize import apply_badge_ownership, public_profile_payload, sanitize_profile_config
 from app.db import data_api
 from app.models import User
 
@@ -166,4 +166,4 @@ async def resolve_public_profile(username: str) -> dict[str, Any] | None:
     identity = cleaned.get("profile")
     if isinstance(identity, dict):
         identity["views"] = await data_api.get_profile_view_count(user.id)
-    return cleaned
+    return public_profile_payload(cleaned)

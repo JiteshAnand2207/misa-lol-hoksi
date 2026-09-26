@@ -23,6 +23,11 @@ pub async fn public_view(
     if !enabled {
         return Err(err(StatusCode::NOT_FOUND, "feature_off"));
     }
+    // A saved draft must never become public merely because its release time
+    // has passed. Publish/unpublish is a separate owner action.
+    if get_aux(&pool, &user_id, "capsule_published").await != json!(1) {
+        return Err(err(StatusCode::NOT_FOUND, "feature_off"));
+    }
     let cfg = cfg.unwrap_or_else(|| json!({}));
     let label = cfg.get("label").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let at = cfg.get("at").and_then(|v| v.as_str()).unwrap_or("").to_string();

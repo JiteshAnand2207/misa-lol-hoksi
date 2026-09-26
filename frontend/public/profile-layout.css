@@ -9,9 +9,8 @@
 .profile-header { display:flex; align-items:center; gap:20px; }
 .profile-header > :first-child:not(:only-child) { flex-shrink:0; margin:0; }
 .profile-header > :last-child { min-width:0; flex:1; }
-/* Each slot is a frame-relative coordinate space. Fixed fractional tracks mean
-   changing one element's width never pushes its neighbours away. */
-.profile-media-row { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); align-items:start; gap:12px; margin-top:20px; }
+/* Let media cards wrap before their artwork, controls and labels get squeezed. */
+.profile-media-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,176px),1fr)); align-items:stretch; gap:12px; margin-top:20px; }
 .profile-media-row:empty,.profile-mobile-audio:empty { display:none; }
 .profile-media-slot { min-width:0; position:relative; container:media-slot / inline-size; }
 .profile-audio-slot { order:1; }
@@ -51,6 +50,8 @@ body[data-profile-user] { display:block; padding:0; height:auto; overflow-x:clip
 body[data-profile-user] .profile-composition { min-height:100svh; }
 body[data-profile-user] .card-stage { width:100%; position:relative; left:auto; top:auto; transform:none; }
 body[data-profile-user] .meta { position:static; margin:24px 0 0; }
+body[data-profile-user].content-center .meta { justify-content:center; }
+body[data-profile-user].content-right .meta { justify-content:flex-end; }
 body[data-profile-user] .media-dock { margin:0; width:100%; }
 body[data-profile-user] .discord-presence { width:100%; min-height:80px; }
 body[data-profile-user] .discord-presence-name,body[data-profile-user] .discord-presence-status { white-space:normal; overflow-wrap:anywhere; }

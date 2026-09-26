@@ -181,7 +181,7 @@ function ModernCard({ config, preview, align }: { config: ProfileConfig; preview
         <div className="profile-header" data-identity-align={align}>{config.settings.showAvatar !== false && <ProfileAvatar config={config} className="mb-5" />}
         <div style={{ textAlign: align }}><ProfileIdentity config={config} align={align} /><ProfileBio config={config} align={align} /></div></div>
         <ProfileModules config={config} preview={preview} align={align} />
-        <ProfileMeta config={config} align="left" />
+        <ProfileMeta config={config} align={align} />
       </div>
     </>
   );
@@ -193,7 +193,7 @@ function SimplisticCard({ config, preview, align }: { config: ProfileConfig; pre
       <div className="profile-header" data-identity-align={align}>{config.settings.showAvatar !== false && <ProfileAvatar config={config} className="mb-4 h-20 w-20" />}
       <div style={{ textAlign: align }}><ProfileIdentity config={config} align={align} /><ProfileBio config={config} align={align} /></div></div>
       <ProfileModules config={config} preview={preview} align={align} />
-        <ProfileMeta config={config} align="left" />
+        <ProfileMeta config={config} align={align} />
     </>
   );
 }
@@ -209,7 +209,7 @@ function SleekCard({ config, preview, align }: { config: ProfileConfig; preview:
         <ProfileIdentity config={config} align={align} />
         <div style={{ textAlign: align }}><ProfileBio config={config} align={align} /></div>
         <ProfileModules config={config} preview={preview} align={align} />
-        <ProfileMeta config={config} align="left" />
+        <ProfileMeta config={config} align={align} />
       </div>
     </>
   );

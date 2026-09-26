@@ -103,6 +103,53 @@ def sanitize_profile_config(payload: dict[str, Any]) -> dict[str, Any]:
     return cleaned
 
 
+# The stored profile also carries owner-only feature configuration. Keep the
+# public profile response limited to fields consumed by the current renderer;
+# feature payloads have their own policy-checked endpoints.
+PUBLIC_PROFILE_SETTINGS = frozenset({
+    "premium", "accentColor", "usernameColor", "usernameEffectColor", "textColor",
+    "backgroundColor", "iconColor", "profileOpacity", "backgroundOpacity",
+    "profileBlur", "profileRadius", "profileFrameOpacity", "profileGradient",
+    "showViews", "showBadges", "showSocials", "showJoinDate", "showDiscordStatus",
+    "showUsername", "socialAlign", "cardAlign", "showProfileFrame", "showAvatar",
+    "showAvatarBorder", "showDisplayName", "elementLayouts", "profileFrameScale",
+    "profileFrameWidth", "profileFrameHeight", "profileFrameX", "profileFrameY",
+    "layout", "avatarShape", "bannerShape", "buttonStyle", "profileFont",
+    "profileFontScope", "fontSize", "letterSpacing", "bioTypewriter", "bioTypeMs",
+    "bioDeleteMs", "bioPauseMs", "tabTitleAnimate", "borderColor", "borderWidth",
+    "cardTilt", "entryScreen", "entryText", "pageEnter", "clickSound",
+    "backgroundEffect", "usernameEffect", "usernameGlow", "socialGlow",
+    "badgeGlow", "monochromeIcons", "widgetColorSwap", "ogTitle",
+    "ogDescription", "ogOverlayAvatar", "ogOverlayName", "ogOverlayAddress",
+})
+PUBLIC_PROFILE_ASSETS = frozenset({
+    "avatar", "banner", "background", "backgroundVideo", "backgroundEffectVideo",
+    "audio", "audioArtwork", "audioTitle", "tracks", "cursor", "ogImage",
+    "favicon", "customFont", "clickSound", "entryIcon", "audioEnabled",
+    "audioSource", "volume",
+})
+
+
+def public_profile_payload(config: dict[str, Any]) -> dict[str, Any]:
+    """Project the published profile without owner-only feature or draft data."""
+    settings = config.get("settings") if isinstance(config.get("settings"), dict) else {}
+    assets = config.get("assets") if isinstance(config.get("assets"), dict) else {}
+    profile = config.get("profile") if isinstance(config.get("profile"), dict) else {}
+    result = {
+        "profile": {key: profile[key] for key in ("username", "displayName", "description", "location", "views", "uid", "joinedAt") if key in profile},
+        "settings": {key: value for key, value in settings.items() if key in PUBLIC_PROFILE_SETTINGS},
+        "assets": {key: value for key, value in assets.items() if key in PUBLIC_PROFILE_ASSETS},
+        "socials": config.get("socials") if isinstance(config.get("socials"), list) else [],
+        "badges": config.get("badges") if isinstance(config.get("badges"), list) else [],
+        "widgets": config.get("widgets") if isinstance(config.get("widgets"), list) else [],
+        "sections": config.get("sections") if isinstance(config.get("sections"), list) else [],
+    }
+    for key in ("rank", "discord"):
+        if key in config:
+            result[key] = config[key]
+    return result
+
+
 def _sanitize_settings(settings: dict[str, Any]) -> dict[str, Any]:
     cleaned = dict(settings)
     from app.core.premium import normalize_premium

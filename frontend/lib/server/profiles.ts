@@ -8,6 +8,48 @@ import { userByUsername } from "./users";
 
 type StoredProfile = { config: unknown };
 
+// Public pages may serialize this whole object into HTML. Feature settings in
+// the stored profile can contain sealed capsule text or secret destinations.
+const PUBLIC_SETTINGS = new Set([
+  "premium", "accentColor", "usernameColor", "usernameEffectColor", "textColor", "backgroundColor",
+  "iconColor", "profileOpacity", "backgroundOpacity", "profileBlur", "profileRadius",
+  "profileFrameOpacity", "profileGradient", "showViews", "showBadges", "showSocials",
+  "showJoinDate", "showDiscordStatus", "showUsername", "socialAlign", "cardAlign",
+  "showProfileFrame", "showAvatar", "showAvatarBorder", "showDisplayName", "elementLayouts",
+  "profileFrameScale", "profileFrameWidth", "profileFrameHeight", "profileFrameX", "profileFrameY",
+  "layout", "avatarShape", "bannerShape", "buttonStyle", "profileFont", "profileFontScope",
+  "fontSize", "letterSpacing", "bioTypewriter", "bioTypeMs", "bioDeleteMs", "bioPauseMs",
+  "tabTitleAnimate", "borderColor", "borderWidth", "cardTilt", "entryScreen", "entryText",
+  "pageEnter", "clickSound", "backgroundEffect", "usernameEffect", "usernameGlow",
+  "socialGlow", "badgeGlow", "monochromeIcons", "widgetColorSwap", "ogTitle",
+  "ogDescription", "ogOverlayAvatar", "ogOverlayName", "ogOverlayAddress",
+]);
+const PUBLIC_ASSETS = new Set([
+  "avatar", "banner", "background", "backgroundVideo", "backgroundEffectVideo", "audio",
+  "audioArtwork", "audioTitle", "tracks", "cursor", "ogImage", "favicon", "customFont",
+  "clickSound", "entryIcon", "audioEnabled", "audioSource", "volume",
+]);
+
+function publicProfilePayload(config: Record<string, unknown>): Record<string, unknown> {
+  const settings = object(config.settings);
+  const assets = object(config.assets);
+  const profile = object(config.profile);
+  const identity = Object.fromEntries(Object.entries(profile).filter(([key]) =>
+    ["username", "displayName", "description", "location", "views", "uid", "joinedAt"].includes(key)));
+  const result: Record<string, unknown> = {
+    profile: identity,
+    settings: Object.fromEntries(Object.entries(settings).filter(([key]) => PUBLIC_SETTINGS.has(key))),
+    assets: Object.fromEntries(Object.entries(assets).filter(([key]) => PUBLIC_ASSETS.has(key))),
+    socials: Array.isArray(config.socials) ? config.socials : [],
+    badges: Array.isArray(config.badges) ? config.badges : [],
+    widgets: Array.isArray(config.widgets) ? config.widgets : [],
+    sections: Array.isArray(config.sections) ? config.sections : [],
+  };
+  if (config.rank) result.rank = config.rank;
+  if (config.discord) result.discord = config.discord;
+  return result;
+}
+
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? { ...(value as Record<string, unknown>) } : {};
 }
@@ -116,7 +158,7 @@ export async function publicProfile(username: string) {
     delete config.discord;
   }
 
-  return config;
+  return publicProfilePayload(config);
 }
 
 export function profileLimits() {

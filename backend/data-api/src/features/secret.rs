@@ -55,6 +55,10 @@ pub async fn set(
     if url.is_empty() || url.chars().count() > URL_MAX {
         return Err(err_reason(StatusCode::UNPROCESSABLE_ENTITY, "invalid_url", "URL length out of range."));
     }
+    let safe_url = url.parse::<axum::http::Uri>().ok();
+    if !safe_url.as_ref().is_some_and(|uri| matches!(uri.scheme_str(), Some("http" | "https")) && uri.authority().is_some()) {
+        return Err(err_reason(StatusCode::UNPROCESSABLE_ENTITY, "invalid_url", "Use an HTTP or HTTPS destination."));
+    }
     let label = body.label.unwrap_or_default().trim().to_string();
     if label.chars().count() > LABEL_MAX {
         return Err(err_reason(StatusCode::UNPROCESSABLE_ENTITY, "invalid_label", "Label length out of range."));
